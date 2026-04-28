@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pentagon Identity API — Developer Docs</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --surface2: #1a1a26;
+            --border: #2a2a3a;
+            --text: #e0e0e8;
+            --text-dim: #8888a0;
+            --accent: #7c5cff;
+            --accent-dim: #5a3fd6;
+            --green: #3ddc84;
+            --red: #ff4c6a;
+            --yellow: #ffc857;
+            --code-bg: #0d0d15;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* Nav */
+        .nav {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: rgba(10,10,15,0.92); backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            z-index: 100; padding: 0 24px; height: 56px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .nav-logo { font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 10px; }
+        .nav-logo img { height: 28px; }
+        .nav-links { display: flex; gap: 24px; font-size: 14px; }
+        .nav-links a { color: var(--text-dim); }
+        .nav-links a:hover, .nav-links a.active { color: var(--text); text-decoration: none; }
+
+        /* Layout */
+        .container { max-width: 960px; margin: 0 auto; padding: 80px 24px 60px; }
+        .hero { text-align: center; padding: 40px 0 48px; }
+        .hero h1 { font-size: 36px; font-weight: 700; margin-bottom: 12px; }
+        .hero p { font-size: 18px; color: var(--text-dim); max-width: 600px; margin: 0 auto; }
+
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .badge-green { background: rgba(61,220,132,0.15); color: var(--green); }
+        .badge-yellow { background: rgba(255,200,87,0.15); color: var(--yellow); }
+        .badge-purple { background: rgba(124,92,255,0.15); color: var(--accent); }
+        .badge-red { background: rgba(255,76,106,0.15); color: var(--red); }
+
+        /* Sections */
+        section { margin-bottom: 48px; }
+        section h2 { font-size: 24px; font-weight: 700; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        section h3 { font-size: 18px; font-weight: 600; margin: 24px 0 12px; }
+        section p { margin-bottom: 12px; color: var(--text-dim); }
+
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+        th { text-align: left; padding: 10px 12px; background: var(--surface2); color: var(--text); font-weight: 600; border-bottom: 2px solid var(--border); }
+        td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-dim); }
+        tr:hover td { background: var(--surface); }
+        .method { font-weight: 700; font-size: 13px; font-family: monospace; }
+        .method-post { color: var(--green); }
+        .method-get { color: var(--accent); }
+        .method-put { color: var(--yellow); }
+        .endpoint { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text); }
+
+        /* Code */
+        pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+        code { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+        p code, td code, li code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+
+        /* Cards */
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 16px 0; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+        .card h4 { font-size: 16px; margin-bottom: 8px; }
+        .card p { font-size: 14px; margin-bottom: 0; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 0; }
+        .tab { padding: 10px 20px; cursor: pointer; font-size: 14px; color: var(--text-dim); border-bottom: 2px solid transparent; }
+        .tab:hover { color: var(--text); }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Alert box */
+        .alert { padding: 16px 20px; border-radius: 8px; margin: 16px 0; font-size: 14px; }
+        .alert-warning { background: rgba(255,200,87,0.1); border-left: 3px solid var(--yellow); }
+        .alert-info { background: rgba(124,92,255,0.1); border-left: 3px solid var(--accent); }
+        .alert-success { background: rgba(61,220,132,0.1); border-left: 3px solid var(--green); }
+
+        /* TOC sidebar on large screens */
+        @media (min-width: 1200px) {
+            .container { max-width: 960px; margin-left: auto; margin-right: auto; }
+        }
+
+        /* VIP badge */
+        .vip-section { border: 1px solid var(--accent); border-radius: 12px; padding: 24px; margin: 24px 0; background: rgba(124,92,255,0.05); }
+        .vip-section h3 { color: var(--accent); margin-top: 0; }
+
+        ul, ol { margin: 8px 0 16px 24px; }
+        li { margin-bottom: 6px; color: var(--text-dim); }
+
+        /* Footer */
+        .footer { text-align: center; padding: 32px 0; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 13px; }
+    </style>
+</head>
+<body>
+
+<nav class="nav">
+    <div class="nav-logo">
+        ⬠ Pentagon Identity API
+    </div>
+    <div class="nav-links">
+        <a href="#overview" class="active">Overview</a>
+        <a href="#auth">Authentication</a>
+        <a href="#endpoints">Endpoints</a>
+        <a href="#app-keys">App Keys</a>
+        <a href="#migration">Migration Guide</a>
+        <a href="#vip-api">VIP API</a>
+    </div>
+</nav>
+
+<div class="container">
+
+    <div class="hero">
+        <h1>Pentagon Identity API</h1>
+        <p>Authentication, user profiles, wallet binding, NFT data, and social integrations for Pentagon Games ecosystem.</p>
+        <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center;">
+            <span class="badge badge-green">v2.0 — Live</span>
+            <span class="badge badge-purple">App Keys Active</span>
+        </div>
+    </div>
+
+    <div class="alert alert-warning">
+        <strong>⚠️ Migration Deadline: May 28, 2026</strong> — All login/signup requests must include an <code>X-PG-App-Key</code> header. Currently in soft mode (warnings only). <a href="#migration">See migration guide →</a>
+    </div>
+
+    <!-- OVERVIEW -->
+    <section id="overview">
+        <h2>Overview</h2>
+        <p>The Pentagon Identity API provides unified authentication and user management for all Pentagon Games products. One account works across pentagon.games, Gunnies, EtherFantasy, PentaSwap, and all partner apps.</p>
+
+        <div class="card-grid">
+            <div class="card">
+                <h4>🔐 Authentication</h4>
+                <p>Email/password, wallet signature, magic link, Ethermail SSO, social OAuth (Discord, Twitter, Telegram, LinkedIn)</p>
+            </div>
+            <div class="card">
+                <h4>👛 Multi-Chain Wallets</h4>
+                <p>EVM (MetaMask, Rabby, Phantom), MultiversX, Tron, TON, Algorand wallet binding</p>
+            </div>
+            <div class="card">
+                <h4>🖼️ NFT Data</h4>
+                <p>Cross-chain NFT ownership, metadata, collection info. Synced by backend oracle from on-chain data.</p>
+            </div>
+            <div class="card">
+                <h4>⭐ VIP & Referrals</h4>
+                <p>Referral codes, VIP status, Discord role sync, friends system</p>
+            </div>
+        </div>
+
+        <h3>Base URL</h3>
+        <pre><code>https://api.account.pentagon.games</code></pre>
+        <p>All endpoints are prefixed with <code>/user/</code> unless otherwise noted.</p>
+
+        <h3>Authentication Pattern</h3>
+        <p>Most endpoints require a JWT Bearer token obtained from login:</p>
+        <pre><code>Authorization: Bearer eyJhbGciOiJIUzI1NiIs...</code></pre>
+    </section>
+
+    <!-- AUTH -->
+    <section id="auth">
+        <h2>Authentication</h2>
+
+        <h3>Login Methods</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+            <tr>
+                <td><span class="method method-post">POST</span></td>
+                <td class="endpoint">/user/login</td>
+                <td>Email/password or wallet signature login</td>
+            </tr>
+            <tr>
+                <td><span class="method method-post">POST</span></td>
+                <td class="endpoint">/user/login/email</td>
+                <td>Magic link login (sends email)</td>
+            </tr>
+            <tr>
+                <td><span class="method method-post">POST</span></td>
+                <td class="endpoint">/user/login/ethermail</td>
+                <td>Ethermail SSO login</td>
+            </tr>
+            <tr>
+                <td><span class="method method-post">POST</span></td>
+                <td class="endpoint">/user/token/refresh</td>
+                <td>Refresh expired JWT token</td>
+            </tr>
+        </table>
+
+        <h3>Email/Password Login</h3>
+        <pre><code>POST /user/login
+Content-Type: application/json
+X-PG-App-Key: pk_live_your_key
+
+{
+  "type": "email",
+  "username": "player@example.com",
+  "password": "securepassword",
+  "login_from": "your_app_name"
+}</code></pre>
+
+        <h3>Wallet Signature Login</h3>
+        <p>For web3 wallet login, the client signs a message and the backend verifies the signature matches the wallet address.</p>
+        <pre><code>POST /user/login
+Content-Type: application/json
+X-PG-App-Key: pk_live_your_key
+
+{
+  "type": "wallet",
+  "address": "0x1234...abcd",
+  "signature": "0xsigned...",
+  "message": "Logging into Pentagon Games,1745812345",
+  "login_from": "your_app_name"
+}</code></pre>
+        <p><strong>Message format:</strong> <code>Logging into Pentagon Games,{unix_timestamp_seconds}</code></p>
+        <p><strong>Timestamp window:</strong> Must be within 5 minutes of server time.</p>
+        <p><strong>Prerequisite:</strong> Wallet must be previously bound to an account via <code>/user/bind_metamask</code>.</p>
+
+        <h3>Successful Login Response</h3>
+        <pre><code>{
+  "status": true,
+  "result": {
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
+  }
+}</code></pre>
+
+        <h3>Error Responses</h3>
+        <table>
+            <tr><th>Error</th><th>Meaning</th></tr>
+            <tr><td><code>Unauthenticated user</code></td><td>Wrong credentials or wallet not registered</td></tr>
+            <tr><td><code>User not verified</code></td><td>Email not validated yet</td></tr>
+            <tr><td><code>Invalid Signature</code></td><td>Wallet signature verification failed or timestamp expired</td></tr>
+        </table>
+    </section>
+
+    <!-- ENDPOINTS -->
+    <section id="endpoints">
+        <h2>API Endpoints</h2>
+
+        <h3>User Info</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info</td><td>Bearer</td><td>Current user's full profile</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info/detail</td><td>Bearer</td><td>Limited user info</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info/private</td><td>Bearer</td><td>Private user info</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info_by_username/public/&lt;username&gt;</td><td>None</td><td>Public profile lookup</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/check_username</td><td>API Key</td><td>Check username availability</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/edit_details</td><td>Bearer</td><td>Update profile</td></tr>
+        </table>
+
+        <h3>Wallet Binding</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_metamask</td><td>Bearer</td><td>Connect EVM wallet</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_multiversx</td><td>Bearer</td><td>Connect MultiversX wallet</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_tron</td><td>Bearer</td><td>Connect Tron wallet</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_ton</td><td>Bearer</td><td>Connect TON wallet</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/updateAlgorand</td><td>Bearer</td><td>Connect Algorand wallet</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/walletinfo</td><td>Bearer</td><td>Get connected wallets</td></tr>
+        </table>
+
+        <h3>NFT Data</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/nfts</td><td>Bearer</td><td>User's NFTs across all chains</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/nfts?collection=Gunnies</td><td>Bearer</td><td>Filter by collection name</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/nfts?order_by=recently_received</td><td>Bearer</td><td>Sort by recent</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/penxr/nfts</td><td>Bearer</td><td>PenXR NFT display data</td></tr>
+        </table>
+
+        <h3>Social Auth & Connections</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/auth/discord</td><td>Bearer</td><td>Connect Discord</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/auth/twitter</td><td>Bearer</td><td>Connect Twitter/X</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/auth/telegram</td><td>Bearer</td><td>Connect Telegram</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/auth/linkedin</td><td>Bearer</td><td>Connect LinkedIn</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/social/oauth/&lt;platform&gt;/connect</td><td>Bearer</td><td>Generic OAuth connect</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/social/&lt;platform&gt;/disconnect</td><td>Bearer</td><td>Disconnect platform</td></tr>
+            <tr><td><span class="method method-put">PUT</span></td><td class="endpoint">/user/social/&lt;platform&gt;/privacy</td><td>Bearer</td><td>Update privacy setting</td></tr>
+        </table>
+
+        <h3>Email & Password</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/verify-email</td><td>Bearer</td><td>Send verification email</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/validate-email</td><td>Token</td><td>Validate email from link</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/validate_email/v2</td><td>Token</td><td>Validate email v2</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/password/forgot</td><td>None</td><td>Forgot password</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/password/reset</td><td>Token</td><td>Reset password</td></tr>
+        </table>
+
+        <h3>Friends System</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/friends</td><td>Bearer</td><td>Get friends list</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/friends/connect</td><td>Bearer</td><td>Send friend request</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/friends/pending</td><td>Bearer</td><td>Pending requests</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/friends/update</td><td>Bearer</td><td>Accept/reject request</td></tr>
+        </table>
+
+        <h3>VIP & Referrals</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/referrals/&lt;code&gt;</td><td>None</td><td>Referral info</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/referral_code/validate/&lt;code&gt;</td><td>None</td><td>Validate referral code</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/discord_roles</td><td>Bearer</td><td>User's Discord roles</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/lookup_vip</td><td>API Key</td><td>VIP status by email</td></tr>
+        </table>
+
+        <h3>SSO (Single Sign-On)</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/sso/authorize</td><td>Bearer</td><td>Generate authorization code</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/sso/token</td><td>None</td><td>Exchange code for token</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/sso/validate</td><td>None</td><td>Validate SSO token</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/sso/user_roles</td><td>Bearer</td><td>Get user roles via SSO</td></tr>
+        </table>
+
+        <h3>2FA & Security</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/2fa/generate</td><td>Bearer</td><td>Generate 2FA QR code</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/2fa/verify</td><td>Bearer</td><td>Verify 2FA code</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/check_echovault_token</td><td>Bearer</td><td>Check EchoVault token</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/register_echovault_token</td><td>Bearer</td><td>Register EchoVault token</td></tr>
+        </table>
+
+        <h3>Signup</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/signup/ethermail</td><td>None</td><td>Signup via Ethermail</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/api/v3/user/signup</td><td>None</td><td>Signup v3</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/api/v4/user/signup</td><td>None</td><td>Signup v4 (latest)</td></tr>
+        </table>
+    </section>
+
+    <!-- APP KEYS -->
+    <section id="app-keys">
+        <h2>App Keys</h2>
+        <p>Every application that calls the Pentagon Identity API must include an App Key header to identify itself.</p>
+
+        <h3>How It Works</h3>
+        <pre><code>X-PG-App-Key: pk_live_your_key_here</code></pre>
+        <p>Add this header to all requests to the Identity API. Keys are issued per-application and tracked for analytics and security.</p>
+
+        <h3>Key Types</h3>
+        <table>
+            <tr><th>Type</th><th>Prefix</th><th>Use Case</th><th>Restrictions</th></tr>
+            <tr><td>Web App</td><td><code>pk_live_</code></td><td>Browser-based apps</td><td>Origin-locked to registered domains</td></tr>
+            <tr><td>Native App</td><td><code>pk_live_</code></td><td>Unity games, mobile apps</td><td>No origin restriction</td></tr>
+            <tr><td>Server</td><td><code>pk_live_</code></td><td>Backend services</td><td>IP-locked to registered servers</td></tr>
+            <tr><td>Development</td><td><code>pk_test_</code></td><td>Local development</td><td>localhost only</td></tr>
+        </table>
+
+        <h3>Getting a Key</h3>
+        <p>Contact the Pentagon Games team to register your application and receive a key. You'll need to provide:</p>
+        <ul>
+            <li><strong>App name</strong> — what your app is called</li>
+            <li><strong>App type</strong> — web, native, or server</li>
+            <li><strong>Origins or IPs</strong> — where it will be called from</li>
+            <li><strong>Contact email</strong> — for security notifications</li>
+        </ul>
+
+        <div class="alert alert-info">
+            <strong>Note:</strong> App keys are visible in browser dev tools for web apps. That's by design. They're origin-locked, so they can't be used from unauthorized domains. For native apps and servers, treat keys as secrets.
+        </div>
+    </section>
+
+    <!-- MIGRATION -->
+    <section id="migration">
+        <h2>Migration Guide</h2>
+
+        <div class="alert alert-warning">
+            <strong>Deadline: May 28, 2026</strong> — After this date, requests without a valid <code>X-PG-App-Key</code> header will be rejected with HTTP 401 on all login/signup endpoints.
+        </div>
+
+        <h3>Step 1: Get Your Key</h3>
+        <p>Contact Pentagon Games team or check if a key has already been generated for your app.</p>
+
+        <h3>Step 2: Add the Header</h3>
+        <p>Add <code>X-PG-App-Key</code> to every request that hits login/signup endpoints.</p>
+
+        <p><strong>Affected endpoints:</strong></p>
+        <ul>
+            <li><code>POST /user/login</code></li>
+            <li><code>POST /user/login/email</code></li>
+            <li><code>POST /user/login/ethermail</code></li>
+            <li><code>POST /user/signup/ethermail</code></li>
+            <li><code>POST /api/v3/user/signup</code></li>
+            <li><code>POST /api/v4/user/signup</code></li>
+            <li><code>POST /sso/authorize</code></li>
+            <li><code>POST /sso/token</code></li>
+        </ul>
+
+        <h3>Code Examples</h3>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab(event, 'tab-js')">JavaScript</div>
+            <div class="tab" onclick="switchTab(event, 'tab-unity')">Unity / C#</div>
+            <div class="tab" onclick="switchTab(event, 'tab-python')">Python</div>
+            <div class="tab" onclick="switchTab(event, 'tab-curl')">cURL</div>
+        </div>
+
+        <div id="tab-js" class="tab-content active">
+            <pre><code>// Add to your login API call
+const response = await fetch("https://api.account.pentagon.games/user/login", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-PG-App-Key": process.env.PG_APP_KEY,  // ← Add this
+  },
+  body: JSON.stringify({
+    type: "email",
+    username: email,
+    password: password,
+    login_from: "your_app",
+  }),
+});
+
+const data = await response.json();
+if (data.status) {
+  const token = data.result.access_token;
+  // Store token, use as Bearer auth for subsequent requests
+}</code></pre>
+        </div>
+
+        <div id="tab-unity" class="tab-content">
+            <pre><code>using UnityEngine.Networking;
+using System.Text;
+
+string json = JsonUtility.ToJson(new LoginRequest {
+    type = "email",
+    username = email,
+    password = password,
+    login_from = "gunnies_pc"
+});
+
+UnityWebRequest request = new UnityWebRequest(
+    "https://api.account.pentagon.games/user/login", "POST");
+byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
+request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+request.downloadHandler = new DownloadHandlerBuffer();
+request.SetRequestHeader("Content-Type", "application/json");
+request.SetRequestHeader("X-PG-App-Key", appKey);  // ← Add this
+
+yield return request.SendWebRequest();</code></pre>
+        </div>
+
+        <div id="tab-python" class="tab-content">
+            <pre><code>import requests
+import os
+
+response = requests.post(
+    "https://api.account.pentagon.games/user/login",
+    headers={
+        "Content-Type": "application/json",
+        "X-PG-App-Key": os.environ["PG_APP_KEY"],  # ← Add this
+    },
+    json={
+        "type": "email",
+        "username": username,
+        "password": password,
+        "login_from": "backend_service",
+    },
+)
+
+data = response.json()
+if data["status"]:
+    token = data["result"]["access_token"]</code></pre>
+        </div>
+
+        <div id="tab-curl" class="tab-content">
+            <pre><code>curl -X POST https://api.account.pentagon.games/user/login \
+  -H "Content-Type: application/json" \
+  -H "X-PG-App-Key: pk_test_your_key" \
+  -d '{
+    "type": "email",
+    "username": "test@example.com",
+    "password": "password123",
+    "login_from": "testing"
+  }'</code></pre>
+        </div>
+
+        <h3>Timeline</h3>
+        <table>
+            <tr><th>Date</th><th>What Happens</th></tr>
+            <tr><td>Apr 28, 2026</td><td><span class="badge badge-green">Now</span> CORS locked. App Keys live in soft mode (warnings only)</td></tr>
+            <tr><td>May 12, 2026</td><td>Check-in. Review logs for apps still missing keys</td></tr>
+            <tr><td>May 21, 2026</td><td>Final warning to any app without a key</td></tr>
+            <tr><td><strong>May 28, 2026</strong></td><td><span class="badge badge-red">Enforcement</span> Requests without keys rejected with 401</td></tr>
+        </table>
+    </section>
+
+    <!-- VIP -->
+    <section id="vip-api">
+        <h2>VIP Developer API Access</h2>
+
+        <div class="vip-section">
+            <h3>⭐ For VIP Members</h3>
+            <p>Pentagon VIP members can generate personal API keys for programmatic access to their own data and their friends' public data.</p>
+            <p><strong>Generate your key at:</strong> <a href="https://vip.pentagon.games/developer">vip.pentagon.games/developer</a> (coming soon)</p>
+        </div>
+
+        <h3>What You Get</h3>
+        <table>
+            <tr><th>Scope</th><th>Endpoints</th><th>Description</th></tr>
+            <tr><td><code>self:read</code></td><td>/user/info, /user/nfts, /user/walletinfo</td><td>Your profile, NFTs, and wallet data</td></tr>
+            <tr><td><code>friends:read</code></td><td>/user/friends, /user/friends/&lt;username&gt;/info</td><td>Your friends list and their public profiles</td></tr>
+            <tr><td><code>nfts:read</code></td><td>/user/friends/&lt;username&gt;/nfts</td><td>Your friends' NFT collections</td></tr>
+        </table>
+
+        <h3>Rate Limits</h3>
+        <table>
+            <tr><th>Key Type</th><th>Rate Limit</th></tr>
+            <tr><td>VIP User Key (<code>uk_live_</code>)</td><td>60 requests / minute</td></tr>
+            <tr><td>App Key (<code>pk_live_</code>)</td><td>100 requests / minute</td></tr>
+            <tr><td>No key (deprecated)</td><td>Will be rejected after May 28</td></tr>
+        </table>
+
+        <h3>Usage</h3>
+        <pre><code># Use your personal API key
+curl -H "X-PG-User-Key: uk_live_your_key" \
+  https://api.account.pentagon.games/user/info
+
+# Get your NFTs
+curl -H "X-PG-User-Key: uk_live_your_key" \
+  https://api.account.pentagon.games/user/nfts
+
+# Get a friend's public info
+curl -H "X-PG-User-Key: uk_live_your_key" \
+  https://api.account.pentagon.games/user/friends/friendname/info</code></pre>
+    </section>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        <p>Pentagon Games — Identity API Documentation</p>
+        <p style="margin-top: 4px;">Questions? Contact team via Discord or email.</p>
+    </div>
+
+</div>
+
+<script>
+function switchTab(event, tabId) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+}
+
+// Smooth scroll for nav links
+document.querySelectorAll('.nav-links a').forEach(link => {
+    link.addEventListener('click', (e) => {
+        const href = link.getAttribute('href');
+        if (href.startsWith('#')) {
+            e.preventDefault();
+            document.querySelector(href).scrollIntoView({ behavior: 'smooth', block: 'start' });
+            document.querySelectorAll('.nav-links a').forEach(l => l.classList.remove('active'));
+            link.classList.add('active');
+        }
+    });
+});
+
+// Update active nav on scroll
+window.addEventListener('scroll', () => {
+    const sections = document.querySelectorAll('section');
+    let current = '';
+    sections.forEach(s => {
+        if (window.scrollY >= s.offsetTop - 80) current = s.id;
+    });
+    document.querySelectorAll('.nav-links a').forEach(l => {
+        l.classList.remove('active');
+        if (l.getAttribute('href') === '#' + current) l.classList.add('active');
+    });
+});
+</script>
+
+</body>
+</html>
