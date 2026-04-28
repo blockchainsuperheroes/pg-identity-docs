@@ -244,6 +244,22 @@ X-PG-App-Key: pk_live_your_key
   }
 }</code></pre>
 
+        <h3>PNS (Pentagon Name Service) Login</h3>
+        <p>Users with a PNS username NFT can log in using their on-chain name instead of their email or PG username. The backend resolves the PNS name to a wallet address via the on-chain contract, then matches it to the PG account with that wallet bound.</p>
+        <pre><code>POST /user/login
+Content-Type: application/json
+X-PG-App-Key: pk_live_your_key
+
+{
+  "type": "email",
+  "username": "king",
+  "password": "userpassword",
+  "login_from": "your_app_name"
+}</code></pre>
+        <p><strong>Resolution flow:</strong> PNS name → on-chain contract → wallet address → PG account lookup → password verification → JWT token</p>
+        <p><strong>Contract:</strong> <code>0xf97EB9f8293D1FD5587a809Eb74518c300738d07</code> on Pentagon Chain (3344)</p>
+        <p><strong>Requirements:</strong> The PNS name must be minted AND spatially bound to a wallet that is connected to a PG account.</p>
+
         <h3>Error Responses</h3>
         <table>
             <tr><th>Error</th><th>Meaning</th></tr>
