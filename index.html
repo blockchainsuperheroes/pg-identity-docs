@@ -259,6 +259,25 @@ X-PG-App-Key: pk_live_your_key
         <p><strong>Resolution flow:</strong> PNS name → on-chain contract → wallet address → PG account lookup → password verification → JWT token</p>
         <p><strong>Contract:</strong> <code>0xf97EB9f8293D1FD5587a809Eb74518c300738d07</code> on Pentagon Chain (3344)</p>
         <p><strong>Requirements:</strong> The PNS name must be minted AND spatially bound to a wallet that is connected to a PG account.</p>
+        <div class="alert alert-success">
+            <strong>PNS is now the primary username system.</strong> Legacy PG usernames (e.g. "nftprof1") still work for login but are being phased out. Once a user has a bound PNS name, that becomes their identity across all Pentagon services.
+        </div>
+
+        <h3>Login Methods Summary</h3>
+        <table>
+            <tr><th>Method</th><th>Example</th><th>Status</th></tr>
+            <tr><td>Email + Password</td><td><code>nftprof@pentagon.games</code></td><td><span class="badge badge-green">Active</span></td></tr>
+            <tr><td>PNS Name + Password</td><td><code>nftprof</code> (on-chain bound)</td><td><span class="badge badge-green">Active</span></td></tr>
+            <tr><td>Current Username + Password</td><td><code>nftprof1</code></td><td><span class="badge badge-green">Active</span></td></tr>
+            <tr><td>Wallet Signature</td><td>MetaMask / Rabby / Phantom</td><td><span class="badge badge-green">Active</span></td></tr>
+            <tr><td>Magic Link (email)</td><td>Sends login link to email</td><td><span class="badge badge-green">Active</span></td></tr>
+            <tr><td>Ethermail SSO</td><td>Ethermail token</td><td><span class="badge badge-green">Active</span></td></tr>
+            <tr style="opacity:0.5"><td><s>Legacy Username + Password</s></td><td><s><code>nftprof</code> (as legacy of nftprof1)</s></td><td><span class="badge badge-red">Removed</span></td></tr>
+        </table>
+
+        <div class="alert alert-warning">
+            <strong>⚠️ Legacy username login removed (April 29, 2026)</strong> — Users can no longer log in with legacy/old usernames. Use your current username, email, or PNS name instead. Legacy usernames are retained in the database for PNS NFT airdrop mapping only.
+        </div>
 
         <h3>Error Responses</h3>
         <table>
