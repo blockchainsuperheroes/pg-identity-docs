@@ -121,9 +121,11 @@
     </div>
     <div class="nav-links">
         <a href="#overview" class="active">Overview</a>
+        <a href="#getting-started">Getting Started</a>
         <a href="#auth">Authentication</a>
         <a href="#endpoints">Endpoints</a>
         <a href="#app-keys">App Keys</a>
+        <a href="#database">Database</a>
         <a href="#migration">Migration Guide</a>
         <a href="#vip-api">VIP My Data</a>
     </div>
@@ -144,10 +146,44 @@
         <strong>⚠️ Migration Deadline: May 28, 2026</strong> — All login/signup requests must include an <code>X-PG-App-Key</code> header. Currently in soft mode (warnings only). <a href="#migration">See migration guide →</a>
     </div>
 
+    <!-- GETTING STARTED -->
+    <section id="getting-started" style="border: 2px solid var(--accent); border-radius: 12px; padding: 28px; background: rgba(124,92,255,0.06);">
+        <h2 style="border-bottom-color: var(--accent);">🚀 Getting Started</h2>
+        <p style="color: var(--text); font-size: 16px;">Before you can use the Pentagon Identity API, you <strong>must</strong> have an App Key. Requests without a valid key will be rejected starting May 28, 2026.</p>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 20px 0;">
+            <div class="card" style="border-color: var(--accent);">
+                <h4>Step 1: Request an App Key</h4>
+                <p>Contact the Pentagon Games team to get your key:</p>
+                <ul style="margin-bottom: 0;">
+                    <li>Email: <a href="mailto:nftprof@pentagon.games">nftprof@pentagon.games</a></li>
+                    <li>Discord: <a href="https://discord.gg/pentagon">Pentagon Games server</a></li>
+                </ul>
+            </div>
+            <div class="card" style="border-color: var(--accent);">
+                <h4>Step 2: Add the Header</h4>
+                <p>Include your App Key in all login and signup requests:</p>
+                <pre style="margin-bottom: 0;"><code>X-PG-App-Key: pk_live_your_key</code></pre>
+            </div>
+            <div class="card" style="border-color: var(--accent);">
+                <h4>Step 3: Integrate</h4>
+                <p>Use the <a href="#endpoints">endpoint reference</a> below to integrate authentication, wallets, NFTs, and social connections into your app.</p>
+            </div>
+        </div>
+
+        <div class="alert alert-info" style="margin-bottom: 0;">
+            <strong>Current status:</strong> App Key enforcement is in <strong>soft mode</strong> (warnings only in server logs). Full enforcement begins <strong>May 28, 2026</strong>, after which requests without a valid key will receive HTTP 401. <a href="#migration">See migration timeline →</a>
+        </div>
+    </section>
+
     <!-- OVERVIEW -->
     <section id="overview">
         <h2>Overview</h2>
         <p>The Pentagon Identity API provides unified authentication and user management for all Pentagon Games products. One account works across pentagon.games, Gunnies, EtherFantasy, PentaSwap, and all partner apps.</p>
+
+        <div class="alert alert-info">
+            <strong>Infrastructure:</strong> This system runs on <code>pg_identity_db</code>, a dedicated PostgreSQL identity database. Fully migrated from the legacy <code>chainguardians</code> database in May 2026. Currently serving <strong>729,291+ registered users</strong> across the Pentagon ecosystem.
+        </div>
 
         <div class="card-grid">
             <div class="card">
@@ -259,6 +295,9 @@ X-PG-App-Key: pk_live_your_key
         <p><strong>Resolution flow:</strong> PNS name → on-chain contract → wallet address → PG account lookup → password verification → JWT token</p>
         <p><strong>Contract:</strong> <code>0xf97EB9f8293D1FD5587a809Eb74518c300738d07</code> on Pentagon Chain (3344)</p>
         <p><strong>Requirements:</strong> The PNS name must be minted AND spatially bound to a wallet that is connected to a PG account.</p>
+        <div class="alert alert-info">
+            <strong>Note:</strong> PNS names are <strong>lowercase only</strong> on-chain. When submitting a PNS name for login, use the lowercase form (e.g. <code>king</code>, not <code>King</code>). The backend normalizes input to lowercase before contract lookup.
+        </div>
         <div class="alert alert-success">
             <strong>PNS is now the primary username system.</strong> Legacy PG usernames (e.g. "nftprof1") still work for login but are being phased out. Once a user has a bound PNS name, that becomes their identity across all Pentagon services.
         </div>
@@ -409,17 +448,141 @@ X-PG-App-Key: pk_live_your_key
         </table>
 
         <h3>Getting a Key</h3>
-        <p>Contact the Pentagon Games team to register your application and receive a key. You'll need to provide:</p>
+        <p>Contact the Pentagon Games team to register your application and receive a key:</p>
+        <ul>
+            <li><strong>Email:</strong> <a href="mailto:nftprof@pentagon.games">nftprof@pentagon.games</a></li>
+            <li><strong>Discord:</strong> Pentagon Games server (reach out to a team member)</li>
+        </ul>
+        <p>You'll need to provide:</p>
         <ul>
             <li><strong>App name</strong> — what your app is called</li>
             <li><strong>App type</strong> — web, native, or server</li>
-            <li><strong>Origins or IPs</strong> — where it will be called from</li>
-            <li><strong>Contact email</strong> — for security notifications</li>
+            <li><strong>Allowed origins or IPs</strong> — the domains or server IPs your app will call from</li>
+            <li><strong>Contact email</strong> — for security notifications and key rotation alerts</li>
         </ul>
+
+        <div class="alert alert-success">
+            <strong>Currently 24 apps registered</strong> including Pentagon Website, Gunnies, PenDeFi, BCSH TCG, EtherFantasy, and partner integrations. Turnaround is typically within 24 hours.
+        </div>
 
         <div class="alert alert-info">
             <strong>Note:</strong> App keys are visible in browser dev tools for web apps. That's by design. They're origin-locked, so they can't be used from unauthorized domains. For native apps and servers, treat keys as secrets.
         </div>
+    </section>
+
+    <!-- DATABASE -->
+    <section id="database">
+        <h2>Database Reference</h2>
+        <p>The Pentagon Identity system is backed by <code>pg_identity_db</code>, a dedicated PostgreSQL database. Below is a reference of all tables organized by domain.</p>
+
+        <h3>Core Identity</h3>
+        <p>Primary user records, wallets, login tracking, and profile data.</p>
+        <table>
+            <tr><th>Table</th><th>Description</th></tr>
+            <tr><td><code>user</code></td><td>Primary user accounts (email, username, password hash, created_at, referral info)</td></tr>
+            <tr><td><code>user_wallet</code></td><td>Primary EVM wallet binding (one per user, used for login and PNS resolution)</td></tr>
+            <tr><td><code>user_external_wallets</code></td><td>Additional wallets: MultiversX, Tron, TON, Algorand, and secondary EVM wallets</td></tr>
+            <tr><td><code>user_legacy_username</code></td><td>Old/renamed usernames retained for PNS NFT airdrop mapping</td></tr>
+            <tr><td><code>user_login_history</code></td><td>Login event log (timestamp, IP, method, app key used)</td></tr>
+            <tr><td><code>user_data</code></td><td>Extended user metadata and preferences</td></tr>
+            <tr><td><code>user_profile_picture</code></td><td>Avatar/profile image references</td></tr>
+            <tr><td><code>user_old_usernames</code></td><td>Username change history</td></tr>
+        </table>
+
+        <h3>Social &amp; Auth</h3>
+        <p>Social platform connections, OAuth tokens, Discord role sync, and social graph.</p>
+        <table>
+            <tr><th>Table</th><th>Description</th></tr>
+            <tr><td><code>user_social_accounts</code></td><td>Connected social platforms (Discord, Twitter, Telegram, LinkedIn)</td></tr>
+            <tr><td><code>user_discord_roles</code></td><td>Synced Discord roles for gating and VIP status</td></tr>
+            <tr><td><code>user_friendship</code></td><td>Friend connections (pending, accepted, blocked)</td></tr>
+            <tr><td><code>user_follows</code></td><td>Follow relationships between users</td></tr>
+            <tr><td><code>social_platforms</code></td><td>Platform definitions and OAuth configuration</td></tr>
+            <tr><td><code>user_security_accounts</code></td><td>2FA and security key registrations</td></tr>
+        </table>
+
+        <h3>App Key System</h3>
+        <p>Application registration, key tracking, and usage analytics.</p>
+        <table>
+            <tr><th>Table</th><th>Description</th></tr>
+            <tr><td><code>app_registrations</code></td><td>Registered applications with key, type, allowed origins/IPs</td></tr>
+            <tr><td><code>app_key_logs</code></td><td>Per-request app key usage logs for analytics and abuse detection</td></tr>
+            <tr><td><code>external_app</code></td><td>External/partner app metadata and integration config</td></tr>
+        </table>
+
+        <h3>NFT Data</h3>
+        <p>Cross-chain NFT ownership and metadata, synced by backend oracle.</p>
+        <table>
+            <tr><th>Table</th><th>Description</th></tr>
+            <tr><td><code>nfts</code></td><td>Individual NFT records (token ID, chain, contract, owner)</td></tr>
+            <tr><td><code>nft_collection</code></td><td>Collection definitions (name, chain, type)</td></tr>
+            <tr><td><code>nft_contract</code></td><td>Smart contract addresses per collection per chain</td></tr>
+            <tr><td><code>nft_metadata</code></td><td>Token metadata (name, image, attributes, rarity)</td></tr>
+            <tr><td><code>nft_owners</code></td><td>Current ownership records synced from on-chain data</td></tr>
+        </table>
+
+        <h3>Campaign &amp; Rewards</h3>
+        <p>Badge campaigns, referral tracking, and reward distribution.</p>
+        <table>
+            <tr><th>Table</th><th>Description</th></tr>
+            <tr><td><code>user_campaign_badges</code></td><td>Earned campaign badges</td></tr>
+            <tr><td><code>user_campaign_points</code></td><td>Accumulated campaign points</td></tr>
+            <tr><td><code>user_campaign_sub_badges</code></td><td>Sub-badge progress within campaigns</td></tr>
+            <tr><td><code>user_campaign_ascended_badges</code></td><td>Ascended (evolved) badge records</td></tr>
+            <tr><td><code>user_campaign_royal_badges</code></td><td>Royal tier badge records</td></tr>
+            <tr><td><code>user_referral_details</code></td><td>Referral code ownership and usage tracking</td></tr>
+            <tr><td><code>referral_rewards</code></td><td>Reward payouts for successful referrals</td></tr>
+        </table>
+
+        <h3>PenXR / Metaverse</h3>
+        <p>Metaverse user data, spaces, inventory, and virtual currency.</p>
+        <table>
+            <tr><th>Table</th><th>Description</th></tr>
+            <tr><td><code>penxr_user_data</code></td><td>PenXR user profile and settings</td></tr>
+            <tr><td><code>penxr_user_space</code></td><td>User-owned virtual spaces</td></tr>
+            <tr><td><code>penxr_user_inventory</code></td><td>User's in-world item inventory</td></tr>
+            <tr><td><code>penxr_inventories</code></td><td>Global inventory item definitions</td></tr>
+            <tr><td><code>penxr_user_nfts</code></td><td>NFTs displayed or used within PenXR</td></tr>
+            <tr><td><code>penxr_currency</code></td><td>Virtual currency definitions</td></tr>
+            <tr><td><code>penxr_currency_balance</code></td><td>User currency balances</td></tr>
+        </table>
+
+        <h3>Wallet Infrastructure</h3>
+        <p>Chain definitions, token lists, bridge logs, and supply tracking.</p>
+        <table>
+            <tr><th>Table</th><th>Description</th></tr>
+            <tr><td><code>pgw_chains</code></td><td>Supported blockchain definitions (chain ID, RPC, explorer)</td></tr>
+            <tr><td><code>pgw_chain_tokens</code></td><td>Token contracts per chain</td></tr>
+            <tr><td><code>pgw_swap_chains</code></td><td>Chains enabled for swap/DEX features</td></tr>
+            <tr><td><code>pgw_swap_chain_tokens</code></td><td>Tokens available for swap per chain</td></tr>
+            <tr><td><code>pen_bridge_logs</code></td><td>Cross-chain bridge transaction logs</td></tr>
+            <tr><td><code>pen_supply</code></td><td>Token supply tracking records</td></tr>
+        </table>
+
+        <h3>SSO</h3>
+        <table>
+            <tr><th>Table</th><th>Description</th></tr>
+            <tr><td><code>sso_client</code></td><td>Registered SSO client applications (client ID, secret, redirect URIs)</td></tr>
+        </table>
+
+        <h3>Security</h3>
+        <p>Security keys, KYC, anti-sybil, and access control.</p>
+        <table>
+            <tr><th>Table</th><th>Description</th></tr>
+            <tr><td><code>security_user_keys</code></td><td>Hardware security key / passkey registrations</td></tr>
+            <tr><td><code>user_kyc_status</code></td><td>KYC verification status per user</td></tr>
+            <tr><td><code>sybil_flags</code></td><td>Anti-sybil detection flags and scores</td></tr>
+            <tr><td><code>captcha_data</code></td><td>Captcha challenge and verification records</td></tr>
+            <tr><td><code>blocked_email_domains</code></td><td>Blocked disposable/spam email domains</td></tr>
+        </table>
+
+        <h3>EchoVault</h3>
+        <p>On-chain identity vault contract interactions.</p>
+        <table>
+            <tr><th>Table</th><th>Description</th></tr>
+            <tr><td><code>user_echovault_contract</code></td><td>User's EchoVault contract deployment records</td></tr>
+            <tr><td><code>user_echovault_events</code></td><td>EchoVault on-chain event log</td></tr>
+        </table>
     </section>
 
     <!-- MIGRATION -->
