@@ -125,6 +125,7 @@
         <a href="#auth">Authentication</a>
         <a href="#endpoints">Endpoints</a>
         <a href="#nft-platform">NFT Data</a>
+        <a href="#integration-patterns">Patterns</a>
         <a href="#app-keys">App Keys</a>
         <a href="#database">Database</a>
         <a href="#migration">Migration Guide</a>
@@ -632,6 +633,278 @@ const gunnies = await fetch('https://api.account.pentagon.games/user/nfts?collec
         <div class="alert alert-warning">
             <strong>For internal Pentagon services and approved partners:</strong> Backend services that need to query NFT data across all users (not just a logged-in user) should use the NFT Metadata API at <code>api.metadata.pentagon.games</code> which reads from <code>pg_nft_db</code>. Contact the team for server-type app keys with the appropriate access level. Unauthenticated bulk access to NFT data is not available through the Identity API.
         </div>
+    </section>
+
+    <!-- INTEGRATION PATTERNS -->
+    <section id="integration-patterns">
+        <h2>🔗 Integration Patterns</h2>
+        <p>Pentagon Identity supports multiple integration patterns depending on what your app needs. Some apps need full identity + wallet verification, others just need login for data access, and some work wallet-first without requiring login at all. Choose the pattern that fits your use case.</p>
+
+        <h3>Login Methods (All Patterns)</h3>
+        <p>Before choosing a pattern, understand the available login methods. All use <code>POST /user/login</code> with <code>X-PG-App-Key</code> header:</p>
+
+        <table>
+            <tr><th>Method</th><th><code>type</code> field</th><th>Username / Data Fields</th><th>Description</th></tr>
+            <tr>
+                <td>Email + Password</td>
+                <td><code>type="email"</code></td>
+                <td><code>username="user@example.com"</code>, <code>password="***"</code></td>
+                <td>Standard email login</td>
+            </tr>
+            <tr>
+                <td>PNS Name + Password</td>
+                <td><code>type="email"</code></td>
+                <td><code>username="nftprof"</code> (lowercase PNS name), <code>password="***"</code></td>
+                <td>On-chain Pentagon Name Service lookup. Names are lowercase only.</td>
+            </tr>
+            <tr>
+                <td>Current Username + Password</td>
+                <td><code>type="email"</code></td>
+                <td><code>username="nftprof1"</code>, <code>password="***"</code></td>
+                <td>Direct PG username</td>
+            </tr>
+            <tr>
+                <td>Wallet Signature</td>
+                <td><code>type="wallet"</code></td>
+                <td><code>signature</code>, <code>address</code>, <code>message="Logging into Pentagon Games,{unix_timestamp}"</code></td>
+                <td>Web3 wallet sign-in. Wallet must be pre-bound to account.</td>
+            </tr>
+            <tr>
+                <td>Magic Link (Email)</td>
+                <td colspan="2"><code>POST /user/login/email</code> with <code>email="user@example.com"</code></td>
+                <td>Sends a login link to email, no password needed</td>
+            </tr>
+            <tr>
+                <td>Ethermail SSO</td>
+                <td colspan="2"><code>POST /user/login/ethermail</code> with <code>ethermail_token="..."</code></td>
+                <td>Ethermail integration</td>
+            </tr>
+            <tr>
+                <td>SSO (Widget)</td>
+                <td colspan="2"><code>POST /sso/authorize</code> + <code>/sso/token</code> with <code>client_id</code>, <code>redirect_uri</code></td>
+                <td>Embeddable login widget, returns auth code → token</td>
+            </tr>
+        </table>
+
+        <h3>Pattern 1: PG Login + Wallet Match (Strict Identity)</h3>
+        <div class="alert alert-info">
+            <strong>Used by:</strong> PenDeFi (pendefi.com), Pentagon Website staking, any app where the user must transact with their registered wallet.
+        </div>
+        <p>User logs in via PG Identity, then connects their browser wallet. The app verifies the connected wallet matches the wallet registered to their PG account. This ensures the person controlling the wallet is the verified account holder.</p>
+
+        <p><strong>Flow:</strong></p>
+        <ol>
+            <li>User logs in via any PG login method → gets JWT <code>access_token</code></li>
+            <li>App calls <code>GET /user/info</code> with Bearer token → gets <code>mm_address</code> (registered wallet)</li>
+            <li>User connects browser wallet via RainbowKit/WalletConnect</li>
+            <li>Frontend compares: if <code>connected.toLowerCase() !== mm_address.toLowerCase()</code> → block, show mismatch warning</li>
+            <li>All transactions must come from the matched wallet</li>
+        </ol>
+
+        <pre><code>// After PG login, verify wallet match
+const userInfo = await fetch('/user/info', {
+  headers: { Authorization: `Bearer ${token}` }
+});
+const { mm_address } = (await userInfo.json()).result;
+
+// Compare with connected wallet (from wagmi useAccount)
+if (connectedAddress.toLowerCase() !== mm_address.toLowerCase()) {
+  showError("Please connect the wallet registered to your Pentagon account");
+  return;
+}
+// Wallet verified — proceed with transactions</code></pre>
+
+        <p><strong>When to use:</strong> DeFi apps, staking, token swaps, any app where on-chain actions must be tied to verified identity. Transactions go directly to smart contracts from user's wallet.</p>
+        <p><strong>Transaction handling:</strong> Direct contract calls from user's wallet. No backend fulfillment needed. Frontend uses wagmi/viem <code>writeContract</code>. User pays gas from their own wallet.</p>
+
+        <h3>Pattern 2: PG Login + Any Wallet (Flexible Wallet)</h3>
+        <div class="alert alert-info">
+            <strong>Used by:</strong> NFT Mining (mining.pentagon.games)
+        </div>
+        <p>User logs in via PG Identity to pull their NFT data and account info, but can connect ANY wallet for mining operations. This is intentional — users shouldn't have to use their sensitive NFT-holding wallet for mining.</p>
+
+        <p><strong>Flow:</strong></p>
+        <ol>
+            <li>User logs in via PG Identity → gets JWT → app fetches their NFTs via <code>GET /user/nfts</code></li>
+            <li>User connects any wallet for mining (does NOT need to match <code>mm_address</code>)</li>
+            <li>Mining rewards are tracked by the connected mining wallet, not the PG wallet</li>
+            <li>NFT ownership is verified from PG account data, not from the connected wallet</li>
+        </ol>
+
+        <p><strong>When to use:</strong> Apps where NFT ownership verification is needed but the operational wallet can differ. Protects users from exposing high-value wallets.</p>
+        <p><strong>Transaction handling:</strong> Backend-driven fulfillment. User submits mining action, backend verifies NFT ownership from PG data, and either:</p>
+        <ul>
+            <li>Backend watches for tx from user's mining wallet (tx hash or nonce tracking)</li>
+            <li>Backend fulfills reward distribution to the mining wallet</li>
+        </ul>
+
+        <h3>Pattern 3: PG Login Only (No Wallet)</h3>
+        <div class="alert alert-info">
+            <strong>Used by:</strong> Pentagon.games profile pages, social features, NPC points system, internal tools
+        </div>
+        <p>Pure PG Identity login with no wallet connection needed. The app uses the user's internal PG wallet (<code>centralised_wallet_address</code>) for any on-chain interactions, using NPC points as gas.</p>
+
+        <p><strong>Flow:</strong></p>
+        <ol>
+            <li>User logs in via PG Identity → gets JWT</li>
+            <li>App calls <code>GET /user/info</code> → uses <code>centralised_wallet_address</code> for any chain interactions</li>
+            <li>Backend handles all transactions using the user's managed wallet</li>
+            <li>NPC points balance serves as internal gas</li>
+        </ol>
+
+        <p><strong>When to use:</strong> Social features, points systems, profile management, any feature that doesn't require user-controlled wallet signing.</p>
+        <p><strong>Transaction handling:</strong> Fully backend-managed. User never signs transactions. Backend uses managed wallet with NPC points as gas abstraction.</p>
+
+        <h3>Pattern 4: Wallet-First (PG Account Check)</h3>
+        <div class="alert alert-info">
+            <strong>Used by:</strong> Gunnies.io (gunnies.io), NFT purchase pages
+        </div>
+        <p>User connects wallet first via RainbowKit (no PG login required). The app checks if the connected wallet belongs to a verified PG account. This allows NFT purchases without requiring full PG login — just wallet.</p>
+
+        <p><strong>Flow:</strong></p>
+        <ol>
+            <li>User connects wallet via RainbowKit modal</li>
+            <li>App sends wallet signature to <code>POST /user/login</code> with <code>type="wallet"</code></li>
+            <li>If wallet is bound to a PG account → auto-login, load user data</li>
+            <li>If wallet is NOT bound → user can still buy NFTs (purchase-only mode) or prompted to create account</li>
+            <li>After successful wallet login, app checks <code>mm_address</code> match</li>
+        </ol>
+
+        <pre><code>// Wallet-first login
+const message = `Logging into Pentagon Games,${Math.floor(Date.now() / 1000)}`;
+const signature = await signMessageAsync({ message });
+const result = await signIn('wallet-login', {
+  signature,
+  address: address.toLowerCase(),
+  message,
+  redirect: false
+});
+// If user has PG account → logged in
+// If not → show signup or continue in wallet-only mode</code></pre>
+
+        <p><strong>When to use:</strong> NFT marketplaces, purchase flows, game clients where wallet presence matters more than full identity verification. Lowers friction for buyers.</p>
+        <p><strong>Transaction handling:</strong> Direct contract calls from user's connected wallet. For purchases that need backend fulfillment (minting, reward distribution), backend watches for the tx hash or catches wallet + nonce to verify payment and fulfill.</p>
+
+        <h3>Pattern Comparison</h3>
+        <table>
+            <tr>
+                <th>Pattern</th>
+                <th>PG Login</th>
+                <th>Wallet Connect</th>
+                <th>Wallet Must Match</th>
+                <th>Transaction Source</th>
+                <th>Example Apps</th>
+            </tr>
+            <tr>
+                <td><strong>1: PG + Wallet Match</strong></td>
+                <td>Required</td>
+                <td>Required</td>
+                <td>Yes (strict)</td>
+                <td>User wallet (direct contract)</td>
+                <td>PenDeFi, Staking</td>
+            </tr>
+            <tr>
+                <td><strong>2: PG + Any Wallet</strong></td>
+                <td>Required</td>
+                <td>Required</td>
+                <td>No (any wallet)</td>
+                <td>Backend fulfillment</td>
+                <td>NFT Mining</td>
+            </tr>
+            <tr>
+                <td><strong>3: PG Only</strong></td>
+                <td>Required</td>
+                <td>No</td>
+                <td>N/A</td>
+                <td>Backend (managed wallet)</td>
+                <td>Profile, NPC Points</td>
+            </tr>
+            <tr>
+                <td><strong>4: Wallet First</strong></td>
+                <td>Optional (auto)</td>
+                <td>Required</td>
+                <td>N/A</td>
+                <td>User wallet (direct contract)</td>
+                <td>Gunnies.io, NFT Buy</td>
+            </tr>
+        </table>
+
+        <h3>Wallet Connection Toolkit</h3>
+        <p>Pentagon ecosystem uses RainbowKit v2 + wagmi v2 + viem for wallet connections.</p>
+
+        <pre><code>// Web3Provider.tsx
+import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { skaleNebula, coreDao, mainnet } from 'wagmi/chains';
+
+const PentagonChain = {
+  id: 3344, name: 'Pentagon Chain',
+  nativeCurrency: { name: 'PC', symbol: 'PC', decimals: 18 },
+  rpcUrls: { default: { http: ['https://rpc.pentagon.games'] } },
+  blockExplorers: { default: { name: 'Explorer', url: 'https://explorer.pentagon.games' } }
+};
+
+export const config = getDefaultConfig({
+  appName: 'Your App Name',
+  projectId: 'YOUR_WALLETCONNECT_PROJECT_ID',
+  chains: [mainnet, PentagonChain, skaleNebula, coreDao],
+});</code></pre>
+
+        <p><strong>Dependencies:</strong></p>
+        <pre><code>{
+  "@rainbow-me/rainbowkit": "2",
+  "wagmi": "^2.15.3",
+  "viem": "2.x",
+  "@wagmi/core": "^2.17.1"
+}</code></pre>
+
+        <h3>Transaction Handling</h3>
+        <p>Two models depending on who fulfills:</p>
+
+        <p><strong>Direct Contract (Patterns 1 &amp; 4):</strong></p>
+        <p>User wallet calls contract directly. Frontend uses wagmi <code>writeContract</code> or <code>sendTransaction</code>. No backend tracking needed — contract events handle fulfillment. User pays gas.</p>
+
+        <pre><code>import { useWriteContract } from 'wagmi';
+const { writeContract } = useWriteContract();
+await writeContract({
+  address: '0xContractAddress',
+  abi: contractABI,
+  functionName: 'mint',
+  args: [tokenId],
+  value: parseEther('0.01')
+});</code></pre>
+
+        <p><strong>Backend Fulfillment (Patterns 2 &amp; 3):</strong></p>
+        <p>Backend needs to know when user has paid or taken action. Two approaches:</p>
+        <ol>
+            <li><strong>TX Hash tracking:</strong> User submits tx, frontend sends tx hash to backend, backend watches for confirmation</li>
+            <li><strong>Wallet + Nonce tracking:</strong> Backend knows the user's wallet and expected nonce, watches for matching tx on-chain</li>
+        </ol>
+        <p>Backend then fulfills (mints reward, updates state, distributes tokens) using a service wallet.</p>
+
+        <pre><code>// Frontend: send tx hash to backend for tracking
+const tx = await writeContract({ ... });
+await fetch('/api/submit-mining', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${pgToken}` },
+  body: JSON.stringify({ txHash: tx, walletAddress: connectedAddress })
+});
+// Backend watches chain for tx confirmation, then fulfills</code></pre>
+
+        <h3>Login Widget (SSO)</h3>
+        <p>For apps that want to embed Pentagon login without building their own login UI:</p>
+
+        <pre><code>&lt;!-- Add to your HTML --&gt;
+&lt;script src="https://login.pentagon.games/static/js/pgwidget-sdk-v1.js"&gt;&lt;/script&gt;
+&lt;pentagon-widget clientid="YOUR_SSO_CLIENT_ID"&gt;&lt;/pentagon-widget&gt;
+&lt;script&gt;
+  window.PentagonWidget.mount();
+  window.addEventListener('PentagonGamesSignInOnSuccess', (e) =&gt; {
+    const token = e.detail.token;
+    // User is logged in, use token for API calls
+  });
+&lt;/script&gt;</code></pre>
+
+        <p>The widget opens a popup to login.pentagon.games, handles auth, and fires a <code>PentagonGamesSignInOnSuccess</code> event with the JWT token. Currently 5 SSO clients registered.</p>
     </section>
 
     <!-- APP KEYS -->
