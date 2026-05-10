@@ -785,6 +785,57 @@ const result = await signIn('wallet-login', {
         <p><strong>When to use:</strong> NFT marketplaces, purchase flows, game clients where wallet presence matters more than full identity verification. Lowers friction for buyers.</p>
         <p><strong>Transaction handling:</strong> Direct contract calls from user's connected wallet. For purchases that need backend fulfillment (minting, reward distribution), backend watches for the tx hash or catches wallet + nonce to verify payment and fulfill.</p>
 
+        <h3>Pattern 5: Wallet-First + PG Optional (Zero Friction)</h3>
+        <div class="alert alert-info">
+            <strong>Used by:</strong> NFT Mining v2 (web3 mode), any app targeting existing web3 users who don't have a Pentagon account yet.
+        </div>
+        <p>User connects any wallet with <strong>zero PG account required</strong>. Their NFTs are loaded directly from the NFT data API by wallet address. They can use the app immediately. If they later create a PG account (or already have one), the experience upgrades automatically.</p>
+
+        <p><strong>How it differs from Pattern 4:</strong> Pattern 4 (Gunnies.io) connects wallet then silently checks if it's a PG account and auto-logs in. Pattern 5 doesn't require or check for a PG account at all. The wallet IS the identity. PG login is purely an optional enhancement layer.</p>
+
+        <ol>
+            <li>User connects wallet via RainbowKit (no signup, no PG account needed)</li>
+            <li>App loads NFTs from NFT data API: <code>GET nft-data.pentagon.games/api/v1/nft/owner/{address}</code></li>
+            <li>User can start using the app immediately (e.g., mining with on-chain mode)</li>
+            <li>App shows CTA to create PG account for enhanced features</li>
+            <li>If user creates account or logs in, experience upgrades: faster indexed NFT loading, offchain modes, free gas, PNS identity</li>
+        </ol>
+
+        <pre><code>// Pattern 5: Wallet-first, PG optional
+import { useAccount } from 'wagmi';
+
+const { address, isConnected } = useAccount();
+
+// Load NFTs directly by wallet address (no PG login needed)
+const nfts = await fetch(`https://nft-data.pentagon.games/api/v1/nft/owner/${address}`);
+
+// Check if they have a PG account (optional enhancement)
+const pgCheck = await fetch(`https://api.account.pentagon.games/user/info_by_username/public/${address}`);
+const hasPGAccount = pgCheck.status === true;
+
+if (hasPGAccount) {
+  // Unlock enhanced features: offchain mining, faster data, free gas
+} else {
+  // Show CTA to create PG account
+}</code></pre>
+
+        <p><strong>When to use:</strong> Apps targeting web3-native users who may not have a Pentagon account. Eliminates signup friction entirely. The PG account becomes a value-add, not a gate.</p>
+        <p><strong>Transaction handling:</strong> User wallet handles all transactions directly (on-chain). For PG-enhanced features (offchain mining), backend fulfillment via managed wallet.</p>
+
+        <div class="alert alert-warning">
+            <strong>⚠️ Required: PG Account Upsell CTA</strong><br>
+            Every app implementing Pattern 5 <strong>MUST</strong> include a visible call-to-action explaining why users should create a Pentagon Games account. This is the conversion funnel from web3 users to the PG ecosystem. Without it, wallet-only users have no reason to join.
+            <br><br>
+            <strong>Recommended CTA content:</strong><br>
+            🚀 <strong>Upgrade to Pentagon Games</strong><br>
+            • Faster NFT loading from indexed database (372K+ NFTs, instant)<br>
+            • Offchain mining with no gas needed<br>
+            • Mine from a separate wallet (keep NFT holdings safe)<br>
+            • Free starting gas ($PC) on Pentagon Chain<br>
+            • PNS name as your cross-ecosystem identity<br>
+            [Create Account] [Learn about PNS]
+        </div>
+
         <h3>Pattern Comparison</h3>
         <table>
             <tr>
@@ -826,6 +877,14 @@ const result = await signIn('wallet-login', {
                 <td>N/A</td>
                 <td>User wallet (direct contract)</td>
                 <td>Gunnies.io, NFT Buy</td>
+            </tr>
+            <tr>
+                <td><strong>5: Wallet + PG Optional</strong></td>
+                <td>Optional (enhancement)</td>
+                <td>Required</td>
+                <td>N/A</td>
+                <td>User wallet / backend if PG</td>
+                <td>NFT Mining v2</td>
             </tr>
         </table>
 
