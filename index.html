@@ -124,6 +124,7 @@
         <a href="#getting-started">Getting Started</a>
         <a href="#auth">Authentication</a>
         <a href="#endpoints">Endpoints</a>
+        <a href="#nft-platform">NFT Data</a>
         <a href="#app-keys">App Keys</a>
         <a href="#database">Database</a>
         <a href="#migration">Migration Guide</a>
@@ -427,6 +428,210 @@ X-PG-App-Key: pk_live_your_key
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/api/v3/user/signup</td><td>None</td><td>Signup v3</td></tr>
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/api/v4/user/signup</td><td>None</td><td>Signup v4 (latest)</td></tr>
         </table>
+    </section>
+
+    <!-- NFT DATA PLATFORM -->
+    <section id="nft-platform">
+        <h2>🖼️ NFT Data Platform</h2>
+
+        <div class="alert alert-success" style="font-size: 16px; padding: 20px 24px;">
+            <strong>Build on top of Pentagon's cross-chain NFT data.</strong> Once a user logs in via the Identity API, your app gets access to their full profile, wallet addresses, social connections, AND their complete NFT portfolio across 15+ blockchains. No indexer setup, no RPC calls, no Alchemy/Moralis subscription needed.
+        </div>
+
+        <h3>What You Get After User Login</h3>
+        <p>A single login gives your application access to the user's entire Pentagon ecosystem data:</p>
+
+        <div class="card-grid">
+            <div class="card">
+                <h4>👤 User Identity</h4>
+                <p>Username, email, PNS name, profile picture, about me, interests. The user's Pentagon account is their universal identity.</p>
+            </div>
+            <div class="card">
+                <h4>👛 Wallet Addresses</h4>
+                <p>All connected wallets: EVM (MetaMask, Rabby, Phantom), MultiversX, Tron, TON, Algorand. Plus Pentagon-generated managed wallets.</p>
+            </div>
+            <div class="card">
+                <h4>🖼️ Cross-Chain NFTs</h4>
+                <p>Every NFT the user owns across Ethereum, Polygon, BSC, Pentagon Chain, SKALE, Oasys, Core, Avalanche, Arbitrum, TON, Base, Tron, and more. Synced from on-chain data by Pentagon's oracle backend.</p>
+            </div>
+            <div class="card">
+                <h4>🔗 Social Connections</h4>
+                <p>Discord, Twitter/X, Telegram, LinkedIn accounts. Discord role data. Friend lists and follow relationships.</p>
+            </div>
+        </div>
+
+        <h3>The Developer Flow</h3>
+        <pre><code>// 1. User logs in via your app (using Pentagon Identity)
+const loginRes = await fetch('https://api.account.pentagon.games/user/login', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-PG-App-Key': 'pk_live_your_key'
+  },
+  body: JSON.stringify({
+    type: 'email',
+    username: 'player@example.com',   // or PNS name like "nftprof"
+    password: '***'
+  })
+});
+const { access_token } = (await loginRes.json()).result;
+
+// 2. Get user profile + wallet addresses
+const userInfo = await fetch('https://api.account.pentagon.games/user/info', {
+  headers: { 'Authorization': `Bearer ${access_token}` }
+});
+// Returns: username, email, mm_address, social accounts, profile picture...
+
+// 3. Get ALL their NFTs across every supported chain
+const nfts = await fetch('https://api.account.pentagon.games/user/nfts', {
+  headers: { 'Authorization': `Bearer ${access_token}` }
+});
+// Returns: paginated list of every NFT the user owns
+
+// 4. Filter by collection
+const gunnies = await fetch('https://api.account.pentagon.games/user/nfts?collection=Gunnies%20PFP', {
+  headers: { 'Authorization': `Bearer ${access_token}` }
+});</code></pre>
+
+        <h3>NFT API Endpoints</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr>
+                <td><span class="method method-get">GET</span></td>
+                <td class="endpoint">/user/nfts</td>
+                <td>Bearer</td>
+                <td>All NFTs owned by the logged-in user, across all chains</td>
+            </tr>
+            <tr>
+                <td><span class="method method-get">GET</span></td>
+                <td class="endpoint">/user/nfts?collection=&lt;name&gt;</td>
+                <td>Bearer</td>
+                <td>Filter by collection name (comma-separated for multiple)</td>
+            </tr>
+            <tr>
+                <td><span class="method method-get">GET</span></td>
+                <td class="endpoint">/user/nfts?name=&lt;search&gt;</td>
+                <td>Bearer</td>
+                <td>Search NFTs by name</td>
+            </tr>
+            <tr>
+                <td><span class="method method-get">GET</span></td>
+                <td class="endpoint">/user/nfts?order_by=recently_received</td>
+                <td>Bearer</td>
+                <td>Sort by most recently acquired</td>
+            </tr>
+            <tr>
+                <td><span class="method method-get">GET</span></td>
+                <td class="endpoint">/user/nfts?order_by=recently_created</td>
+                <td>Bearer</td>
+                <td>Sort by creation date</td>
+            </tr>
+            <tr>
+                <td><span class="method method-get">GET</span></td>
+                <td class="endpoint">/user/penxr/nfts</td>
+                <td>Bearer</td>
+                <td>PenXR metaverse NFT display data (frame positions, likes)</td>
+            </tr>
+            <tr>
+                <td><span class="method method-get">GET</span></td>
+                <td class="endpoint">/user/info_by_username/public/&lt;username&gt;</td>
+                <td>None</td>
+                <td>Public profile lookup (includes EchoVault token info)</td>
+            </tr>
+        </table>
+
+        <h3>NFT Response Format</h3>
+        <pre><code>// GET /user/nfts response
+{
+  "success": true,
+  "result": {
+    "items": [
+      {
+        "id": 12345,
+        "token_id": "4521",
+        "name": "Gunnies PFP #4521",
+        "type": "ERC-721",
+        "image": "https://storage.googleapis.com/...",
+        "desc": "A unique Gunnies PFP character"
+      },
+      {
+        "id": 67890,
+        "token_id": "1337",
+        "name": "BCSH #1337",
+        "type": "ERC-721",
+        "image": "https://...",
+        "desc": ""
+      }
+    ],
+    "total_item": 47,
+    "total_page": 5
+  }
+}</code></pre>
+
+        <h3>Supported Collections &amp; Chains</h3>
+        <p>The Pentagon oracle syncs NFT ownership data from <strong>15+ blockchains</strong>. Below are the active collections with NFTs currently tracked:</p>
+
+        <table>
+            <tr><th>Collection</th><th>Chain</th><th>Chain ID</th><th>NFTs Tracked</th></tr>
+            <tr><td>ChainGunnies</td><td>Oasys</td><td>5555</td><td>97,868</td></tr>
+            <tr><td>Azuki</td><td>Ethereum</td><td>1</td><td>10,000</td></tr>
+            <tr><td>Bored Ape Yacht Club</td><td>Ethereum</td><td>1</td><td>10,000</td></tr>
+            <tr><td>Gunnies PFP</td><td>Pentagon Chain</td><td>3344</td><td>9,093</td></tr>
+            <tr><td>Chainbunnies</td><td>Ethereum</td><td>1</td><td>6,052</td></tr>
+            <tr><td>BCSH (TON)</td><td>TON</td><td>181818</td><td>2,500</td></tr>
+            <tr><td>BCSH (Monad)</td><td>Monad</td><td>143</td><td>2,498</td></tr>
+            <tr><td>Zombunnies</td><td>Ethereum</td><td>1</td><td>1,225</td></tr>
+            <tr><td>BCSH (Oasys/PC)</td><td>Pentagon Chain</td><td>3344</td><td>1,124</td></tr>
+            <tr><td>BCSH (Polygon)</td><td>Polygon</td><td>137</td><td>1,051</td></tr>
+            <tr><td>BCSH (SKALE)</td><td>SKALE</td><td>1482601649</td><td>687+</td></tr>
+            <tr><td>BCSH (Arbitrum)</td><td>Arbitrum</td><td>42161</td><td>426</td></tr>
+            <tr><td>BCSH (Ethereum)</td><td>Ethereum</td><td>1</td><td>294</td></tr>
+            <tr><td>BCSH (Core)</td><td>Core</td><td>1116</td><td>227</td></tr>
+            <tr><td>Chainguardians (Oasys)</td><td>Oasys</td><td>5555</td><td>150</td></tr>
+            <tr><td>POW Bull Badge</td><td>Ethereum</td><td>1</td><td>142</td></tr>
+            <tr><td>PEGNAMES (PNS)</td><td>Pentagon Chain</td><td>3344</td><td>91</td></tr>
+            <tr><td>BCSH (BSC)</td><td>BSC</td><td>56</td><td>37</td></tr>
+            <tr><td>Missing Onez</td><td>Core</td><td>1116</td><td>32</td></tr>
+            <tr><td>BCSH (Avalanche)</td><td>Avalanche</td><td>43114</td><td>15</td></tr>
+            <tr><td>BCSH (Tron)</td><td>Tron</td><td>728126428</td><td>6</td></tr>
+        </table>
+        <p style="margin-top:8px"><strong>Total:</strong> 368,522 NFTs tracked across 2.1M+ metadata records and 353,712 ownership records. 36 collections, 112 contracts, 15+ chains.</p>
+
+        <div class="card-grid" style="margin-top: 24px;">
+            <div class="card">
+                <h4>⛓️ Supported Chains</h4>
+                <p>Ethereum, Polygon, BSC, Pentagon Chain (3344), Oasys, SKALE, Core, Avalanche, Arbitrum, TON, Monad, Tron, Base</p>
+            </div>
+            <div class="card">
+                <h4>🔄 Sync Frequency</h4>
+                <p>On-chain ownership synced by the <code>nft-sync-cron</code> oracle. Ownership changes reflected within minutes of on-chain transfer.</p>
+            </div>
+        </div>
+
+        <h3>Use Cases</h3>
+        <div class="card-grid">
+            <div class="card">
+                <h4>🎮 Game Integration</h4>
+                <p>Let users log in and instantly see their game assets, PFPs, and collectibles. No separate NFT indexer needed. Build loot systems, marketplaces, and inventories on top of Pentagon's data.</p>
+            </div>
+            <div class="card">
+                <h4>📊 Portfolio / Analytics</h4>
+                <p>Build NFT portfolio trackers, collection dashboards, or analytics tools. One login gives you the user's complete cross-chain holdings.</p>
+            </div>
+            <div class="card">
+                <h4>🎨 Creator Tools</h4>
+                <p>Build tools that show creators who holds their NFTs, enable token-gated content, or create holder-only experiences.</p>
+            </div>
+            <div class="card">
+                <h4>🏆 Rewards &amp; Airdrops</h4>
+                <p>Target airdrops or rewards based on what a user holds. Verify NFT ownership for eligibility checks, Discord role assignment, or loyalty programs.</p>
+            </div>
+        </div>
+
+        <h3>Internal / Approved Application Access</h3>
+        <div class="alert alert-warning">
+            <strong>For internal Pentagon services and approved partners:</strong> Backend services that need to query NFT data across all users (not just a logged-in user) should use the NFT Metadata API at <code>api.metadata.pentagon.games</code> which reads from <code>pg_nft_db</code>. Contact the team for server-type app keys with the appropriate access level. Unauthenticated bulk access to NFT data is not available through the Identity API.
+        </div>
     </section>
 
     <!-- APP KEYS -->
