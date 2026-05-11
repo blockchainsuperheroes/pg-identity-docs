@@ -176,6 +176,12 @@
         <div class="alert alert-info" style="margin-bottom: 0;">
             <strong>Current status:</strong> App Key enforcement is in <strong>soft mode</strong> (warnings only in server logs). Full enforcement begins <strong>May 28, 2026</strong>, after which requests without a valid key will receive HTTP 401. <a href="#migration">See migration timeline →</a>
         </div>
+
+        <div class="alert alert-warning" style="margin-top: 16px; font-size: 15px;">
+            <strong>⚠️ Recommended: Direct API Login (not redirects)</strong><br>
+            Build your login form directly into your app and call the Pentagon Identity API from your own frontend/backend. <strong>Do NOT redirect users to pentagon.games to sign in.</strong> The API is designed for direct integration: your app collects credentials, calls <code>POST /user/login</code> with your App Key, and gets a JWT back. This keeps users on your site, gives you full control of the UX, and avoids redirect friction.<br><br>
+            The only exception is the <strong>SSO Widget</strong> (<code>&lt;pentagon-widget&gt;</code>) for apps that want a drop-in login popup without building their own form. Even then, the widget opens as an overlay, not a full redirect.
+        </div>
     </section>
 
     <!-- OVERVIEW -->
@@ -639,6 +645,36 @@ const gunnies = await fetch('https://api.account.pentagon.games/user/nfts?collec
     <section id="integration-patterns">
         <h2>🔗 Integration Patterns</h2>
         <p>Pentagon Identity supports multiple integration patterns depending on what your app needs. Some apps need full identity + wallet verification, others just need login for data access, and some work wallet-first without requiring login at all. Choose the pattern that fits your use case.</p>
+
+        <div class="alert alert-success" style="font-size: 15px;">
+            <strong>✅ Default Approach: Embed login directly in your app.</strong> Build your own login form (email/password fields, wallet connect button) and call the Pentagon Identity API directly. Your app collects credentials, sends them to <code>POST /user/login</code> with your <code>X-PG-App-Key</code>, and receives a JWT token. The user never leaves your site.<br><br>
+            <strong>Do NOT redirect users to pentagon.games for authentication.</strong> The API is designed for direct integration. Every pattern below assumes your app handles the login UI and makes API calls server-side or from the frontend. The SSO Widget is the only exception (drop-in popup overlay, not a redirect).
+        </div>
+
+        <h3>Direct Login Example (Recommended for All Apps)</h3>
+        <p>This is the standard approach. Your app has its own login form, calls the API, and manages the session:</p>
+        <pre><code>// Your login form handler — runs on YOUR site
+async function handleLogin(email, password) {
+  const res = await fetch('https://api.account.pentagon.games/user/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-PG-App-Key': 'pk_live_your_key'   // Your app key
+    },
+    body: JSON.stringify({
+      type: 'email',
+      username: email,      // works with email, PNS name, or username
+      password: password,
+      login_from: 'your_app'
+    })
+  });
+  const data = await res.json();
+  if (data.status) {
+    const { access_token, refresh_token } = data.result;
+    // Store tokens, user is logged in on YOUR site
+    // Now fetch their profile, NFTs, etc.
+  }
+}</code></pre>
 
         <h3>Login Methods (All Patterns)</h3>
         <p>Before choosing a pattern, understand the available login methods. All use <code>POST /user/login</code> with <code>X-PG-App-Key</code> header:</p>
