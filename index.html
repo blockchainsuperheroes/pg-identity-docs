@@ -178,9 +178,9 @@
         </div>
 
         <div class="alert alert-warning" style="margin-top: 16px; font-size: 15px;">
-            <strong>⚠️ Recommended: Direct API Login (not redirects)</strong><br>
-            Build your login form directly into your app and call the Pentagon Identity API from your own frontend/backend. <strong>Do NOT redirect users to pentagon.games to sign in.</strong> The API is designed for direct integration: your app collects credentials, calls <code>POST /user/login</code> with your App Key, and gets a JWT back. This keeps users on your site, gives you full control of the UX, and avoids redirect friction.<br><br>
-            The only exception is the <strong>SSO Widget</strong> (<code>&lt;pentagon-widget&gt;</code>) for apps that want a drop-in login popup without building their own form. Even then, the widget opens as an overlay, not a full redirect.
+            <strong>⚠️ Recommended: Popup Login Modal (not redirects)</strong><br>
+            Build a <strong>popup login modal</strong> in your app that calls the Pentagon Identity API directly. User clicks "Sign In", a modal overlay appears with email/password + wallet options, they authenticate, modal closes, done. <strong>Do NOT redirect users to pentagon.games to sign in.</strong><br><br>
+            This is how pentagon.games, gunnies.io, and mining.pentagon.games all work. See the <a href="#integration-patterns">Integration Patterns</a> section for a drop-in React modal component, vanilla JS popup, and API-only examples.
         </div>
     </section>
 
@@ -651,15 +651,270 @@ const gunnies = await fetch('https://api.account.pentagon.games/user/nfts?collec
             <strong>Do NOT redirect users to pentagon.games for authentication.</strong> The API is designed for direct integration. Every pattern below assumes your app handles the login UI and makes API calls server-side or from the frontend. The SSO Widget is the only exception (drop-in popup overlay, not a redirect).
         </div>
 
-        <h3>Direct Login Example (Recommended for All Apps)</h3>
-        <p>This is the standard approach. Your app has its own login form, calls the API, and manages the session:</p>
-        <pre><code>// Your login form handler — runs on YOUR site
-async function handleLogin(email, password) {
+        <h3>Recommended: Popup Login Modal</h3>
+        <p>The best UX is a <strong>popup modal</strong> that opens over your page (like pentagon.games does). User clicks "Sign In", a modal appears with email/password + wallet options, they log in, modal closes, they're back on your page. No redirect, no new tab.</p>
+
+        <div class="card-grid">
+            <div class="card">
+                <h4>✅ Popup Modal (Best)</h4>
+                <p>Login form opens as overlay on your page. User never leaves. This is how pentagon.games, gunnies.io, and mining.pentagon.games work.</p>
+            </div>
+            <div class="card">
+                <h4>⚠️ Inline Form (OK)</h4>
+                <p>Login fields embedded directly in your page (e.g., sidebar or dedicated section). Good for simple apps. Still uses the API directly.</p>
+            </div>
+            <div class="card">
+                <h4>🚫 Redirect (Avoid)</h4>
+                <p>Sending users to pentagon.games to log in, then redirecting back. Breaks flow, loses context, confusing UX. Only use if you have no frontend.</p>
+            </div>
+        </div>
+
+        <h3>Popup Modal Reference Implementation</h3>
+        <p>Drop-in React login modal with email/password and wallet tabs. Uses your own App Key, no redirect needed.</p>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab(event, 'tab-react-modal')">React (Modal)</div>
+            <div class="tab" onclick="switchTab(event, 'tab-vanilla-modal')">Vanilla JS (Modal)</div>
+            <div class="tab" onclick="switchTab(event, 'tab-api-only')">API Only</div>
+        </div>
+
+        <div id="tab-react-modal" class="tab-content active">
+        <pre><code>// PentagonLoginModal.tsx — Drop-in popup login for any React/Next.js app
+import { useState } from 'react';
+import { useAccount, useSignMessage } from 'wagmi';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
+
+const PG_API = 'https://api.account.pentagon.games';
+const APP_KEY = process.env.NEXT_PUBLIC_PG_APP_KEY;
+
+export function PentagonLoginModal({ isOpen, onClose, onLogin }) {
+  const [tab, setTab] = useState('email');     // 'email' | 'wallet'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { address, isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
+  const { openConnectModal } = useConnectModal();
+
+  // Email + Password login (also works with PNS name or username)
+  const handleEmailLogin = async (e) =&gt; {
+    e.preventDefault();
+    setLoading(true); setError('');
+    try {
+      const res = await fetch(`${PG_API}/user/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-PG-App-Key': APP_KEY
+        },
+        body: JSON.stringify({
+          type: 'email',
+          username: email,   // email, PNS name, or username all work
+          password,
+          login_from: 'your_app'
+        })
+      });
+      const data = await res.json();
+      if (data.status) {
+        onLogin(data.result);  // { access_token, refresh_token }
+        onClose();
+      } else {
+        setError(data.message || 'Login failed');
+      }
+    } catch (err) { setError('Network error'); }
+    finally { setLoading(false); }
+  };
+
+  // Wallet signature login
+  const handleWalletLogin = async () =&gt; {
+    if (!isConnected) { openConnectModal?.(); return; }
+    setLoading(true); setError('');
+    try {
+      const message = `Logging into Pentagon Games,${Math.floor(Date.now()/1000)}`;
+      const signature = await signMessageAsync({ message });
+      const res = await fetch(`${PG_API}/user/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-PG-App-Key': APP_KEY
+        },
+        body: JSON.stringify({
+          type: 'wallet',
+          signature,
+          address: address.toLowerCase(),
+          message,
+          login_from: 'your_app'
+        })
+      });
+      const data = await res.json();
+      if (data.status) {
+        onLogin(data.result);
+        onClose();
+      } else {
+        setError(data.message || 'Wallet not linked to an account');
+      }
+    } catch (err) { setError('Signature rejected or failed'); }
+    finally { setLoading(false); }
+  };
+
+  if (!isOpen) return null;
+  return (
+    &lt;div style={{
+      position:'fixed', inset:0, zIndex:9999,
+      background:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)',
+      display:'flex', alignItems:'center', justifyContent:'center'
+    }} onClick={onClose}&gt;
+      &lt;div onClick={e =&gt; e.stopPropagation()} style={{
+        background:'#12121a', border:'1px solid #2a2a3a', borderRadius:16,
+        padding:32, width:400, maxWidth:'90vw', color:'#e0e0e8'
+      }}&gt;
+        &lt;h2 style={{margin:'0 0 20px', fontSize:20}}&gt;⛠ Sign In&lt;/h2&gt;
+
+        {/* Tabs */}
+        &lt;div style={{display:'flex', gap:0, borderBottom:'1px solid #2a2a3a', marginBottom:20}}&gt;
+          &lt;button onClick={() =&gt; setTab('email')} style={{
+            padding:'8px 20px', background:'none', border:'none', cursor:'pointer',
+            color: tab==='email' ? '#7c5cff' : '#8888a0',
+            borderBottom: tab==='email' ? '2px solid #7c5cff' : '2px solid transparent'
+          }}&gt;Email&lt;/button&gt;
+          &lt;button onClick={() =&gt; setTab('wallet')} style={{
+            padding:'8px 20px', background:'none', border:'none', cursor:'pointer',
+            color: tab==='wallet' ? '#7c5cff' : '#8888a0',
+            borderBottom: tab==='wallet' ? '2px solid #7c5cff' : '2px solid transparent'
+          }}&gt;Wallet&lt;/button&gt;
+        &lt;/div&gt;
+
+        {error &amp;&amp; &lt;div style={{color:'#ff4c6a', fontSize:14, marginBottom:12}}&gt;{error}&lt;/div&gt;}
+
+        {tab === 'email' ? (
+          &lt;form onSubmit={handleEmailLogin}&gt;
+            &lt;input placeholder="Email, PNS name, or username" value={email}
+              onChange={e =&gt; setEmail(e.target.value)} style={inputStyle} /&gt;
+            &lt;input type="password" placeholder="Password" value={password}
+              onChange={e =&gt; setPassword(e.target.value)} style={inputStyle} /&gt;
+            &lt;button type="submit" disabled={loading} style={btnStyle}&gt;
+              {loading ? 'Signing in...' : 'Sign In'}
+            &lt;/button&gt;
+          &lt;/form&gt;
+        ) : (
+          &lt;button onClick={handleWalletLogin} disabled={loading} style={btnStyle}&gt;
+            {loading ? 'Confirming...' : isConnected
+              ? `Sign with ${address.slice(0,6)}...${address.slice(-4)}`
+              : 'Connect Wallet'}
+          &lt;/button&gt;
+        )}
+
+        &lt;button onClick={onClose} style={{
+          marginTop:16, background:'none', border:'none',
+          color:'#8888a0', cursor:'pointer', width:'100%', textAlign:'center'
+        }}&gt;Cancel&lt;/button&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  );
+}
+
+const inputStyle = {
+  width:'100%', padding:'10px 14px', marginBottom:12, borderRadius:8,
+  border:'1px solid #2a2a3a', background:'#0a0a0f', color:'#e0e0e8',
+  fontSize:14, outline:'none'
+};
+const btnStyle = {
+  width:'100%', padding:'12px', borderRadius:8, border:'none',
+  background:'#7c5cff', color:'white', fontSize:15,
+  fontWeight:600, cursor:'pointer'
+};
+
+// Usage in your app:
+// const [showLogin, setShowLogin] = useState(false);
+// &lt;button onClick={() =&gt; setShowLogin(true)}&gt;Sign In&lt;/button&gt;
+// &lt;PentagonLoginModal
+//   isOpen={showLogin}
+//   onClose={() =&gt; setShowLogin(false)}
+//   onLogin={({ access_token }) =&gt; { saveToken(access_token); loadUser(); }}
+// /&gt;</code></pre>
+        </div>
+
+        <div id="tab-vanilla-modal" class="tab-content">
+        <pre><code>// Vanilla JS popup modal — no framework needed
+// Add to any HTML page
+
+const PG_API = 'https://api.account.pentagon.games';
+const APP_KEY = 'pk_live_your_key';
+
+function showPentagonLogin(onSuccess) {
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed; inset:0; z-index:9999;
+    background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);
+    display:flex; align-items:center; justify-content:center;
+  `;
+
+  overlay.innerHTML = `
+    &lt;div style="background:#12121a; border:1px solid #2a2a3a; border-radius:16px;
+      padding:32px; width:400px; max-width:90vw; color:#e0e0e8;"&gt;
+      &lt;h2 style="margin:0 0 20px; font-size:20px;"⛠ Sign In&lt;/h2&gt;
+      &lt;input id="pg-email" placeholder="Email, PNS name, or username"
+        style="width:100%; padding:10px 14px; margin-bottom:12px; border-radius:8px;
+        border:1px solid #2a2a3a; background:#0a0a0f; color:#e0e0e8;" /&gt;
+      &lt;input id="pg-pass" type="password" placeholder="Password"
+        style="width:100%; padding:10px 14px; margin-bottom:12px; border-radius:8px;
+        border:1px solid #2a2a3a; background:#0a0a0f; color:#e0e0e8;" /&gt;
+      &lt;div id="pg-error" style="color:#ff4c6a; font-size:14px; margin-bottom:8px;"&gt;&lt;/div&gt;
+      &lt;button id="pg-submit" style="width:100%; padding:12px; border-radius:8px;
+        border:none; background:#7c5cff; color:white; font-size:15px;
+        font-weight:600; cursor:pointer;"&gt;Sign In&lt;/button&gt;
+      &lt;button id="pg-cancel" style="margin-top:12px; width:100%; background:none;
+        border:none; color:#8888a0; cursor:pointer;"&gt;Cancel&lt;/button&gt;
+    &lt;/div&gt;
+  `;
+
+  overlay.querySelector('#pg-cancel').onclick = () =&gt; overlay.remove();
+  overlay.onclick = (e) =&gt; { if (e.target === overlay) overlay.remove(); };
+
+  overlay.querySelector('#pg-submit').onclick = async () =&gt; {
+    const email = overlay.querySelector('#pg-email').value;
+    const pass = overlay.querySelector('#pg-pass').value;
+    const errEl = overlay.querySelector('#pg-error');
+    try {
+      const res = await fetch(`${PG_API}/user/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-PG-App-Key': APP_KEY },
+        body: JSON.stringify({ type:'email', username:email, password:pass, login_from:'your_app' })
+      });
+      const data = await res.json();
+      if (data.status) {
+        overlay.remove();
+        onSuccess(data.result);  // { access_token, refresh_token }
+      } else {
+        errEl.textContent = data.message || 'Login failed';
+      }
+    } catch(e) { errEl.textContent = 'Network error'; }
+  };
+
+  document.body.appendChild(overlay);
+}
+
+// Usage:
+// document.getElementById('login-btn').onclick = () =&gt; {
+//   showPentagonLogin(({ access_token }) =&gt; {
+//     localStorage.setItem('pg_token', access_token);
+//     loadUserData();
+//   });
+// };</code></pre>
+        </div>
+
+        <div id="tab-api-only" class="tab-content">
+        <pre><code>// Server-side or API-only login (no popup needed)
+// Good for backends, CLI tools, or server-rendered apps
+
+async function pgLogin(email, password) {
   const res = await fetch('https://api.account.pentagon.games/user/login', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-PG-App-Key': 'pk_live_your_key'   // Your app key
+      'X-PG-App-Key': 'pk_live_your_key'
     },
     body: JSON.stringify({
       type: 'email',
@@ -670,11 +925,11 @@ async function handleLogin(email, password) {
   });
   const data = await res.json();
   if (data.status) {
-    const { access_token, refresh_token } = data.result;
-    // Store tokens, user is logged in on YOUR site
-    // Now fetch their profile, NFTs, etc.
+    return data.result;  // { access_token, refresh_token }
   }
+  throw new Error(data.message || 'Login failed');
 }</code></pre>
+        </div>
 
         <h3>Login Methods (All Patterns)</h3>
         <p>Before choosing a pattern, understand the available login methods. All use <code>POST /user/login</code> with <code>X-PG-App-Key</code> header:</p>
