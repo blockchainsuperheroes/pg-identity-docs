@@ -130,6 +130,7 @@
         <a href="#database">Database</a>
         <a href="#migration">Migration Guide</a>
         <a href="#vip-api">VIP My Data</a>
+        <a href="#architecture">Architecture</a>
     </div>
 </nav>
 
@@ -1576,6 +1577,68 @@ curl -H "X-PG-User-Key: uk_live_your_key" \
 # Get a friend's public info
 curl -H "X-PG-User-Key: uk_live_your_key" \
   https://api.account.pentagon.games/user/friends/friendname/info</code></pre>
+    </section>
+
+    <!-- ARCHITECTURE -->
+    <section id="architecture">
+        <h2>🏗️ Architecture & Shared API</h2>
+
+        <div class="alert alert-info">
+            <strong>Important:</strong> The <code>api.account.pentagon.games</code> domain serves <strong>both</strong> identity and payment endpoints from a single API server. This is by design, not accidental.
+        </div>
+
+        <h3>Why "Account" = Identity + Payments</h3>
+        <p>The domain is <code>api.account.pentagon.games</code>, not <code>api.identity.pentagon.games</code>. That's because an <strong>account</strong> encompasses both who you are (identity) and what you've paid for (payments). In the accounting sense: your account is your full ledger.</p>
+
+        <h3>What Lives on This API</h3>
+        <table>
+            <thead><tr><th>Category</th><th>Endpoints</th><th>Notes</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td><strong>Identity</strong></td>
+                    <td><code>/user/login</code>, <code>/user/signup</code>, <code>/user/info</code>, <code>/user/edit_details</code>, <code>/user/bind_metamask</code>, <code>/user/nfts</code>, <code>/user/auth/*</code>, <code>/sso/*</code>, <code>/user/2fa/*</code>, etc.</td>
+                    <td>Auth, profiles, wallets, NFTs, social, friends, VIP, referrals</td>
+                </tr>
+                <tr>
+                    <td><strong>Payments</strong></td>
+                    <td><code>/stripe/webhook</code>, <code>/stripe/payment_status</code></td>
+                    <td>Stripe webhook receiver + payment status checks</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Server Topology</h3>
+        <table>
+            <thead><tr><th>Server</th><th>Role</th><th>External-Facing?</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td><code>pg-identity</code></td>
+                    <td>API server: identity endpoints + payment API endpoints (Stripe webhooks, payment_status). Runs <code>pentagon-login-backend</code> via gunicorn behind nginx.</td>
+                    <td>Yes — serves <code>api.account.pentagon.games</code></td>
+                </tr>
+                <tr>
+                    <td><code>pg-payment</code> (workers)</td>
+                    <td>Internal workers only: blockchain scanner + NFT fulfillment. Holds the minter private key. No HTTP ports, no nginx.</td>
+                    <td>No — internal only, zero attack surface</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="alert alert-warning">
+            <strong>Key design decision (May 2026):</strong> Payment API endpoints stay on pg-identity because they share the same nginx/SSL setup on <code>api.account.pentagon.games</code>. The payment <em>workers</em> (scanner, fulfillment, minter key) run on a separate isolated server with no public HTTP. They communicate only through the shared <code>pg_payments_db</code> database.<br><br>
+            <strong>Future split path:</strong> If payment endpoints grow large enough to warrant their own domain (<code>api.payment.pentagon.games</code>), they'd move to a dedicated <code>pg-payment-api</code> server. The identity endpoints stay on pg-identity either way. The workers server remains isolated regardless.
+        </div>
+
+        <h3>Database Separation</h3>
+        <p>Identity and payments use <strong>separate databases</strong> even though they share an API server:</p>
+        <ul style="color: var(--text-dim); margin-bottom: 16px;">
+            <li><code>pg_identity_db</code> — user accounts, auth, profiles, wallets, social, VIP</li>
+            <li><code>pg_payments_db</code> — payment intents, Stripe sessions, fulfillment status, mint records</li>
+        </ul>
+        <p>This means the payment system can be extracted to its own server cleanly when the time comes, no schema entanglement.</p>
+
+        <h3>Related Documentation</h3>
+        <p>For payment-specific details (Stripe integration, fulfillment flow, scanner architecture), see the <a href="https://blockchainsuperheroes.github.io/pg-payment-processor-docs/">Payment Processor Docs</a>.</p>
     </section>
 
     <!-- FOOTER -->
