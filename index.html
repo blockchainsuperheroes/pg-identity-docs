@@ -139,6 +139,17 @@
     <div class="hero">
         <h1>Pentagon Identity API</h1>
         <p>Authentication, user profiles, wallet binding, NFT data, and social integrations for Pentagon Games ecosystem.</p>
+
+        <div class="alert alert-warning" style="font-size: 16px; max-width: 700px; margin: 24px auto; text-align: left; border-left-width: 5px;">
+            <strong>🚫 DO NOT redirect users to pentagon.games/sign-in.</strong><br>
+            Build your login form <strong>inside your app</strong> and call the Pentagon Identity API directly. Your app collects credentials (email/password, PNS name, wallet signature, or magic link), sends them to <code>POST /user/login</code>, and gets a JWT back. The user never leaves your site.<br><br>
+            <strong>4 sign-in methods, all via the same API:</strong><br>
+            1. Email + Password<br>
+            2. PNS Username + Password<br>
+            3. Wallet Signature (MetaMask/Rabby/Phantom)<br>
+            4. Magic Link (passwordless email)<br><br>
+            See <a href="#integration-patterns">Integration Patterns</a> for drop-in React &amp; vanilla JS code, or the <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget">pentagon-login-widget</a> repo for a standalone reference implementation.
+        </div>
         <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center;">
             <span class="badge badge-green">v2.0 — Live</span>
             <span class="badge badge-purple">App Keys Active</span>
@@ -178,10 +189,10 @@
             <strong>Current status:</strong> App Key enforcement is in <strong>soft mode</strong> (warnings only in server logs). Full enforcement begins <strong>May 28, 2026</strong>, after which requests without a valid key will receive HTTP 401. <a href="#migration">See migration timeline →</a>
         </div>
 
-        <div class="alert alert-warning" style="margin-top: 16px; font-size: 15px;">
-            <strong>⚠️ Recommended: Popup Login Modal (not redirects)</strong><br>
-            Build a <strong>popup login modal</strong> in your app that calls the Pentagon Identity API directly. User clicks "Sign In", a modal overlay appears with email/password + wallet options, they authenticate, modal closes, done. <strong>Do NOT redirect users to pentagon.games to sign in.</strong><br><br>
-            This is how pentagon.games, gunnies.io, and mining.pentagon.games all work. See the <a href="#integration-patterns">Integration Patterns</a> section for a drop-in React modal component, vanilla JS popup, and API-only examples.
+        <div class="alert alert-warning" style="margin-top: 16px; font-size: 15px; border-left-width: 5px;">
+            <strong>🚫 NEVER redirect users to pentagon.games/sign-in.</strong> This is the #1 integration mistake. The pentagon.games/sign-in page is for pentagon.games itself, not for third-party apps.<br><br>
+            <strong>✅ Correct approach:</strong> Build a login form <strong>inside your app</strong> (modal, inline form, or dedicated page on YOUR domain). Your form collects credentials and calls <code>POST /user/login</code> with your <code>X-PG-App-Key</code>. The user never leaves your site. All 4 login methods (email+password, PNS name, wallet signature, magic link) work through the same API endpoint.<br><br>
+            Reference code: <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget">github.com/blockchainsuperheroes/pentagon-login-widget</a> — drop-in React component, vanilla JS, and API-only examples.
         </div>
     </section>
 
@@ -652,26 +663,30 @@ const gunnies = await fetch('https://api.account.pentagon.games/user/nfts?collec
             <strong>Do NOT redirect users to pentagon.games for authentication.</strong> The API is designed for direct integration. Every pattern below assumes your app handles the login UI and makes API calls server-side or from the frontend. The SSO Widget is the only exception (drop-in popup overlay, not a redirect).
         </div>
 
-        <h3>Recommended: Popup Login Modal</h3>
-        <p>The best UX is a <strong>popup modal</strong> that opens over your page (like pentagon.games does). User clicks "Sign In", a modal appears with email/password + wallet options, they log in, modal closes, they're back on your page. No redirect, no new tab.</p>
+        <h3>Recommended: In-App Login Form</h3>
+        <p>Build a login form <strong>directly inside your app</strong>. This can be a popup modal overlay, an inline form, or a dedicated login page on your own domain. The key point: <strong>your app handles the UI, your app calls the API, the user never leaves your site.</strong></p>
 
         <div class="card-grid">
             <div class="card">
-                <h4>✅ Popup Modal (Best)</h4>
-                <p>Login form opens as overlay on your page. User never leaves. This is how pentagon.games, gunnies.io, and mining.pentagon.games work.</p>
+                <h4>✅ In-App Modal (Best)</h4>
+                <p>Login form opens as overlay on your page. User never leaves. This is how pentagon.games, gunnies.io, and mining.pentagon.games all work.</p>
             </div>
             <div class="card">
-                <h4>⚠️ Inline Form (OK)</h4>
-                <p>Login fields embedded directly in your page (e.g., sidebar or dedicated section). Good for simple apps. Still uses the API directly.</p>
+                <h4>✅ In-App Page (Good)</h4>
+                <p>Dedicated login page on YOUR domain (e.g., yourapp.com/login). Your own form, your own UI. Calls the Pentagon API from your frontend or backend.</p>
             </div>
             <div class="card">
-                <h4>🚫 Redirect (Avoid)</h4>
-                <p>Sending users to pentagon.games to log in, then redirecting back. Breaks flow, loses context, confusing UX. Only use if you have no frontend.</p>
+                <h4>✅ Inline Form (Good)</h4>
+                <p>Login fields embedded directly in your page (sidebar, header dropdown, etc.). Simple and effective. Still calls the API directly.</p>
+            </div>
+            <div class="card" style="border-color: var(--red);">
+                <h4>🚫 Redirect to pentagon.games (WRONG)</h4>
+                <p><strong>Never do this.</strong> Sending users to pentagon.games/sign-in to log in breaks flow, loses context, and doesn't return tokens to your app. The pentagon.games sign-in page is for pentagon.games only.</p>
             </div>
         </div>
 
-        <h3>Popup Modal Reference Implementation</h3>
-        <p>Drop-in React login modal with email/password and wallet tabs. Uses your own App Key, no redirect needed.</p>
+        <h3>Reference Implementation</h3>
+        <p>Drop-in login components supporting all 4 sign-in methods. Uses your own App Key, no redirect needed. Full source on GitHub: <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget">pentagon-login-widget</a></p>
 
         <div class="tabs">
             <div class="tab active" onclick="switchTab(event, 'tab-react-modal')">React (Modal)</div>
@@ -1242,9 +1257,13 @@ await fetch('/api/submit-mining', {
 // Backend watches chain for tx confirmation, then fulfills</code></pre>
 
         <h3>Login Widget (SSO)</h3>
-        <p>For apps that want to embed Pentagon login without building their own login UI:</p>
+        <div class="alert alert-warning">
+            <strong>⚠️ Legacy — SSO Widget (Not Recommended for New Apps)</strong><br>
+            The SSO Widget below opens a popup to <code>login.pentagon.games</code>. This is an older integration pattern maintained for existing SSO clients. <strong>For new apps, use the in-app login approach above instead</strong> (build your own form, call the API directly). It's simpler, more reliable, and gives you full control over the UX.
+        </div>
+        <p>For existing SSO client apps that already use the widget:</p>
 
-        <pre><code>&lt;!-- Add to your HTML --&gt;
+        <pre><code>&lt;!-- Legacy SSO Widget — for existing SSO clients only --&gt;
 &lt;script src="https://login.pentagon.games/static/js/pgwidget-sdk-v1.js"&gt;&lt;/script&gt;
 &lt;pentagon-widget clientid="YOUR_SSO_CLIENT_ID"&gt;&lt;/pentagon-widget&gt;
 &lt;script&gt;
@@ -1255,7 +1274,7 @@ await fetch('/api/submit-mining', {
   });
 &lt;/script&gt;</code></pre>
 
-        <p>The widget opens a popup to login.pentagon.games, handles auth, and fires a <code>PentagonGamesSignInOnSuccess</code> event with the JWT token. Currently 5 SSO clients registered.</p>
+        <p>The widget opens a popup to login.pentagon.games, handles auth, and fires a <code>PentagonGamesSignInOnSuccess</code> event with the JWT token. Currently 5 SSO clients registered. <strong>New apps should use the <a href="#integration-patterns">in-app login pattern</a> instead.</strong></p>
     </section>
 
     <!-- APP KEYS -->
