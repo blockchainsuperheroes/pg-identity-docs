@@ -141,9 +141,9 @@
         <p>Authentication, user profiles, wallet binding, NFT data, and social integrations for Pentagon Games ecosystem.</p>
 
         <div class="alert alert-warning" style="font-size: 16px; max-width: 700px; margin: 24px auto; text-align: left; border-left-width: 5px;">
-            <strong>🚫 DO NOT redirect users to pentagon.games/sign-in.</strong><br>
-            Build your login form <strong>inside your app</strong> and call the Pentagon Identity API directly. Your app collects credentials (email/password, PNS name, wallet signature, or magic link), sends them to <code>POST /user/login</code>, and gets a JWT back. The user never leaves your site.<br><br>
-            <strong>4 sign-in methods, all via the same API:</strong><br>
+            <strong>🚫 DO NOT redirect or popup to pentagon.games/sign-in or login.pentagon.games.</strong><br>
+            Build your login form <strong>directly on your page</strong> and call the Pentagon Identity API from it. No redirects. No browser popups to external sites. Your app shows the form, your app calls <code>POST /user/login</code>, your app gets the JWT. The user never leaves your page.<br><br>
+            <strong>4 sign-in methods, all via the same <code>POST /user/login</code> API:</strong><br>
             1. Email + Password<br>
             2. PNS Username + Password<br>
             3. Wallet Signature (MetaMask/Rabby/Phantom)<br>
@@ -190,8 +190,9 @@
         </div>
 
         <div class="alert alert-warning" style="margin-top: 16px; font-size: 15px; border-left-width: 5px;">
-            <strong>🚫 NEVER redirect users to pentagon.games/sign-in.</strong> This is the #1 integration mistake. The pentagon.games/sign-in page is for pentagon.games itself, not for third-party apps.<br><br>
-            <strong>✅ Correct approach:</strong> Build a login form <strong>inside your app</strong> (modal, inline form, or dedicated page on YOUR domain). Your form collects credentials and calls <code>POST /user/login</code> with your <code>X-PG-App-Key</code>. The user never leaves your site. All 4 login methods (email+password, PNS name, wallet signature, magic link) work through the same API endpoint.<br><br>
+            <strong>🚫 NEVER redirect or open a popup/new window to pentagon.games or login.pentagon.games.</strong> This is the #1 integration mistake. Those pages are for pentagon.games itself, not for your app.<br><br>
+            <strong>✅ Correct approach:</strong> Put the login form <strong>directly on your page</strong>. An inline form, a modal overlay in your DOM, or a dedicated login page on YOUR domain. Your form collects email/password (or wallet signature), calls <code>POST /user/login</code> with your <code>X-PG-App-Key</code>, and gets a JWT back. The user never leaves your page, no new windows open, no redirects happen.<br><br>
+            This is how pentagon.games, gunnies.io, vip.pentagon.games, and mining.pentagon.games all work. Each site has its own login form that calls the API directly.<br><br>
             Reference code: <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget">github.com/blockchainsuperheroes/pentagon-login-widget</a> — drop-in React component, vanilla JS, and API-only examples.
         </div>
     </section>
@@ -663,25 +664,29 @@ const gunnies = await fetch('https://api.account.pentagon.games/user/nfts?collec
             <strong>Do NOT redirect users to pentagon.games for authentication.</strong> The API is designed for direct integration. Every pattern below assumes your app handles the login UI and makes API calls server-side or from the frontend. The SSO Widget is the only exception (drop-in popup overlay, not a redirect).
         </div>
 
-        <h3>Recommended: In-App Login Form</h3>
-        <p>Build a login form <strong>directly inside your app</strong>. This can be a popup modal overlay, an inline form, or a dedicated login page on your own domain. The key point: <strong>your app handles the UI, your app calls the API, the user never leaves your site.</strong></p>
+        <h3>Recommended: Direct In-Page Login</h3>
+        <p>Build a login form <strong>directly on your page</strong>. The form lives in YOUR HTML/React/Vue app, collects credentials, calls the API, done. <strong>No external windows, no redirects, no popups to other sites.</strong></p>
 
         <div class="card-grid">
             <div class="card">
-                <h4>✅ In-App Modal (Best)</h4>
-                <p>Login form opens as overlay on your page. User never leaves. This is how pentagon.games, gunnies.io, and mining.pentagon.games all work.</p>
+                <h4>✅ In-Page Modal Overlay (Best)</h4>
+                <p>Login form opens as a DOM overlay on your page (like pentagon.games does). User fills in email+password or connects wallet. Your code calls <code>POST /user/login</code>. Modal closes. Done. No external sites involved.</p>
             </div>
             <div class="card">
-                <h4>✅ In-App Page (Good)</h4>
-                <p>Dedicated login page on YOUR domain (e.g., yourapp.com/login). Your own form, your own UI. Calls the Pentagon API from your frontend or backend.</p>
+                <h4>✅ Dedicated Login Page (Good)</h4>
+                <p>A login page on YOUR domain (e.g., yourapp.com/login). Your own form, your own UI. Calls the Pentagon API from your frontend or backend.</p>
             </div>
             <div class="card">
                 <h4>✅ Inline Form (Good)</h4>
-                <p>Login fields embedded directly in your page (sidebar, header dropdown, etc.). Simple and effective. Still calls the API directly.</p>
+                <p>Login fields embedded directly in your page (sidebar, header, section). Simple and effective. Calls the API directly on submit.</p>
             </div>
             <div class="card" style="border-color: var(--red);">
                 <h4>🚫 Redirect to pentagon.games (WRONG)</h4>
-                <p><strong>Never do this.</strong> Sending users to pentagon.games/sign-in to log in breaks flow, loses context, and doesn't return tokens to your app. The pentagon.games sign-in page is for pentagon.games only.</p>
+                <p><strong>Never do this.</strong> Do not redirect to pentagon.games/sign-in. Do not open login.pentagon.games in a popup window. Those pages are for pentagon.games itself and won't return tokens to your app.</p>
+            </div>
+            <div class="card" style="border-color: var(--red);">
+                <h4>🚫 Browser Popup to login.pentagon.games (WRONG)</h4>
+                <p><strong>Never do this either.</strong> Opening a new browser window/popup to login.pentagon.games causes UX issues (popup doesn't close, token doesn't pass back, blocked by popup blockers). Use an in-page form instead.</p>
             </div>
         </div>
 
