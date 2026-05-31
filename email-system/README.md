@@ -346,6 +346,117 @@ s.quit()
 
 ---
 
+## Campaign Email Standards
+
+### Standard Header Format
+
+All campaign/marketing emails MUST use this standard header:
+
+```html
+<!-- HEADER -->
+<div style="padding:28px 36px 24px;border-bottom:1px solid #1a1a28;background:#0a0a10;">
+  <img src="https://pentagon.games/assets/images/brand-kit/alternative/png/alternative-logo-ow.png"
+       alt="Pentagon Games" style="height:30px;width:auto;display:block;" />
+</div>
+```
+
+**Rules:**
+- Dark background (`#0a0a10`)
+- Logo left-aligned, 30px height
+- Use the hosted PNG logo, NOT an SVG or base64-encoded image
+- Light logo (`alternative-logo-ow.png`) for dark backgrounds
+- Dark logo (`alternative-logo-db.png`) for light backgrounds
+- Border bottom separator (`1px solid #1a1a28`)
+
+### Image Hosting — CRITICAL
+
+**NEVER use base64/data URI images in email templates.**
+
+Most email clients (Gmail, Outlook, Yahoo, Apple Mail) block or limit base64 `data:image/...` URIs. This is why the "first email always has broken images."
+
+**Always host images on `pentagon.games` and reference them by URL:**
+
+```html
+<!-- ✅ CORRECT — hosted image URL -->
+<img src="https://pentagon.games/assets/images/brand-kit/alternative/png/alternative-logo-ow.png"
+     alt="Pentagon Games" style="height:30px;width:auto;display:block;" />
+
+<!-- ❌ WRONG — base64 data URI (WILL break in email clients) -->
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSU..." />
+```
+
+**Available brand kit images (hosted):**
+
+| Image | URL |
+|-------|-----|
+| Logo (light/dark bg) | `https://pentagon.games/assets/images/brand-kit/alternative/png/alternative-logo-ow.png` |
+| Logo (dark/light bg) | `https://pentagon.games/assets/images/brand-kit/alternative/png/alternative-logo-db.png` |
+| NPC icon | Must be uploaded to `pentagon.games/assets/images/email/` |
+| PC icon | Must be uploaded to `pentagon.games/assets/images/email/` |
+| Campaign screenshots | Must be uploaded to `pentagon.games/assets/images/email/` |
+
+**For new images:** Upload them to the pentagon.games frontend server (`18.139.44.212`) under `/var/www/prod/public/assets/images/email/` and reference as `https://pentagon.games/assets/images/email/<filename>`.
+
+### Personalization Variables
+
+| Variable | Source | Use |
+|----------|--------|-----|
+| `{{username}}` | VIP DB / pg-identity user table | Greeting: "Hey {{username}}," |
+| `{unsubscribe_link}` | Auto-generated JWT by `send_email()` | Footer unsubscribe link |
+| `{{email}}` | User's email | Footer: "Sent to {{email}} as an early supporter" |
+
+### Unsubscribe Link — IMPORTANT
+
+The unsubscribe page expects a **JWT token** as the `key` parameter:
+
+```
+✅ https://pentagon.games/unsubscribe?key=<JWT_TOKEN>
+❌ https://pentagon.games/unsubscribe?email={{email}}  ← WILL ALWAYS FAIL
+```
+
+**How it works in the backend pipeline (`gmail_email.py`):**
+1. `send_email()` calls `_generate_unsubscribe_token(to_email)`
+2. Looks up user by email, creates 90-day JWT: `{"id": user.id, "type": "unsubscribe"}`
+3. Builds URL: `https://pentagon.games/unsubscribe?key=<TOKEN>`
+4. Replaces `{unsubscribe_link}` in HTML template
+5. Adds `List-Unsubscribe` header for email client one-click unsubscribe
+
+**For manual sends (via gog CLI or scripts):**
+```python
+# On pg-identity server, Django shell:
+from user.gmail_email import _generate_unsubscribe_token
+token = _generate_unsubscribe_token("user@example.com")
+# Then use: https://pentagon.games/unsubscribe?key={token}
+```
+
+### Standard Footer Format
+
+```html
+<!-- FOOTER -->
+<div style="padding:28px 36px;border-top:1px solid #1a1a28;background:#060610;text-align:center;">
+  <p style="color:#555577;font-size:12px;margin:0 0 8px;">
+    Sent to {{email}} as an early Pentagon supporter.
+  </p>
+  <p style="color:#555577;font-size:12px;margin:0;">
+    <a href="{unsubscribe_link}" style="color:#777799;text-decoration:underline;">Unsubscribe</a>
+  </p>
+  <div style="margin:16px 0 0;">
+    <a href="https://x.com/PentagonGamesXP" style="color:#777799;text-decoration:none;margin:0 8px;">𝕏</a>
+    <a href="https://discord.gg/pentagongamesxp" style="color:#777799;text-decoration:none;margin:0 8px;">Discord</a>
+    <a href="https://t.me/pentagongamesxp" style="color:#777799;text-decoration:none;margin:0 8px;">Telegram</a>
+  </div>
+</div>
+```
+
+**Social links (ALWAYS use these exact URLs):**
+- X/Twitter: `https://x.com/PentagonGamesXP`
+- Discord: `https://discord.gg/pentagongamesxp`
+- Telegram: `https://t.me/pentagongamesxp`
+
+**DO NOT use** `@PentagonGames`, `pentagonchain`, or any other handle. It's always `pentagongamesxp`.
+
+---
+
 ## Related
 
 - [pg-identity project docs](../index.html)
