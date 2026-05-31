@@ -1,6 +1,6 @@
 # Pentagon Email Infrastructure — Internal API Documentation
 
-> Last updated: 2026-05-25 | Maintainer: Cerise01 (primary), Cerise02 (email-ops)
+> Last updated: 2026-05-31 | Maintainer: Cerise01 (primary), Cerise02 (email-ops)
 
 ---
 
@@ -457,9 +457,119 @@ token = _generate_unsubscribe_token("user@example.com")
 
 ---
 
+## Standard Email Header
+
+All Pentagon Games emails must use a consistent dark-themed header with the **hosted PNG logo** (not base64/SVG).
+
+### Header HTML
+
+```html
+<!-- HEADER -->
+<div style="padding:28px 36px 24px;border-bottom:1px solid #1a1a28;background:#0a0a10;">
+  <img src="https://pentagon.games/assets/images/brand-kit/alternative/png/alternative-logo-ow.png"
+       alt="Pentagon Games"
+       style="height:30px;width:auto;display:block;" />
+</div>
+```
+
+### Header Specifications
+
+| Property | Value |
+|----------|-------|
+| Background color | `#0a0a10` |
+| Bottom border | `1px solid #1a1a28` |
+| Padding | `28px 36px 24px` |
+| Logo source | `https://pentagon.games/assets/images/brand-kit/alternative/png/alternative-logo-ow.png` |
+| Logo format | PNG (white on transparent, for dark backgrounds) |
+| Logo height | `30px` |
+| Logo alignment | Left-aligned |
+
+**IMPORTANT:** Do NOT use base64-encoded images or SVG format in email headers. See "Image Best Practices" below.
+
+---
+
+## Unsubscribe Process
+
+Pentagon Games uses a **JWT-based unsubscribe** system for CAN-SPAM / GDPR compliance.
+
+### How It Works
+
+1. The backend `send_email()` function in `user/gmail_email.py` auto-generates a JWT unsubscribe token for each recipient.
+2. The email template uses the `{unsubscribe_link}` merge variable.
+3. The backend replaces `{unsubscribe_link}` with the full URL: `https://pentagon.games/unsubscribe?key=<JWT_TOKEN>`
+4. The backend also adds a `List-Unsubscribe` header for one-click unsubscribe (RFC 8058).
+
+### Correct Unsubscribe Link Format
+
+**DO:** Use `{unsubscribe_link}` in templates — the backend handles the rest.
+
+```html
+<a href="{unsubscribe_link}" style="color:#444466;text-decoration:underline;">Unsubscribe</a>
+```
+
+**DO NOT:** Use `?email={{email}}` — this was the old, insecure format.
+
+### Manual Token Generation
+
+If sending emails outside the pipeline (e.g., via `gog` CLI), generate the JWT manually:
+
+```bash
+ssh ubuntu@13.212.154.41
+cd /var/www/pentagon/prod/pentagon-login-backend
+source venv/bin/activate
+python3 -c "
+from user.gmail_email import generate_unsubscribe_token
+token = generate_unsubscribe_token(email='user@example.com')
+print(f'https://pentagon.games/unsubscribe?key={token}')
+"
+```
+
+---
+
+## Image Best Practices
+
+Email clients aggressively filter inline images. Follow these rules for reliable image delivery.
+
+### Rules
+
+1. **ALWAYS use hosted images via HTTPS URLs.** Never use `data:` URIs or base64-encoded images.
+2. **Use PNG format.** SVG is blocked or stripped by most email clients (Gmail, Outlook, Yahoo).
+3. **Host all images on `pentagon.games` or a CDN** with HTTPS.
+4. **Always include `alt` text** on every `<img>` tag.
+5. **Keep images under 100KB each.**
+6. **Set explicit `height` and/or `width`** to prevent layout shifts.
+
+### Why NOT base64 / `data:` URIs?
+
+- **Gmail** strips or blocks `data:` URI images on first delivery.
+- **Outlook** blocks base64 inline images by default.
+- **Yahoo Mail** may strip them entirely.
+- **SVG format** is actively blocked by most major email clients for security reasons.
+- This causes "broken image" icons on first email delivery, damaging brand trust.
+
+### Standard Pentagon Logo for Email
+
+| Property | Value |
+|----------|-------|
+| URL | `https://pentagon.games/assets/images/brand-kit/alternative/png/alternative-logo-ow.png` |
+| Format | PNG (white on transparent) |
+| Height | `30px` |
+| Alt text | `Pentagon Games` |
+
+### Image Tag Template
+
+```html
+<img src="https://pentagon.games/assets/images/[path]"
+     alt="[Descriptive alt text]"
+     style="height:[X]px;width:auto;display:block;" />
+```
+
+---
+
 ## Related
 
 - [pg-identity project docs](../index.html)
+- [Standard Email Header & Footer Reference](../../crm/email-templates/STANDARD-HEADER.md)
 - Obsidian vault: `infrastructure/email-system.md`
 - Obsidian vault: `infrastructure/email-infrastructure-guide.md`
 - Server details: `infrastructure/aws-servers.md`
