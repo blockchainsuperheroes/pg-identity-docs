@@ -238,6 +238,17 @@
     <section id="auth">
         <h2>Authentication</h2>
 
+        <h3>Frontend Routes</h3>
+        <div class="alert alert-info">
+            <strong>Pentagon Games Frontend Routes:</strong>
+            <ul style="margin: 10px 0 0 20px;">
+                <li><code>https://pentagon.games/login</code> — Main user login page</li>
+                <li><code>https://pentagon.games/sign-in</code> — Alias to <code>/login</code> (same page)</li>
+                <li><code>https://pentagon.games/sso-login-widget</code> — OAuth2 SSO integration endpoint (for external apps)</li>
+            </ul>
+            <strong>For your app:</strong> Build your own login form and call the API directly (see <a href="#integration-patterns">Integration Patterns</a>), or use the SSO redirect flow via <code>/sso-login-widget</code>.
+        </div>
+
         <h3>Login Methods</h3>
         <table>
             <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
@@ -992,9 +1003,9 @@ async function pgLogin(email, password) {
                 <td>Ethermail integration</td>
             </tr>
             <tr>
-                <td>SSO (Widget)</td>
-                <td colspan="2"><code>POST /sso/authorize</code> + <code>/sso/token</code> with <code>client_id</code>, <code>redirect_uri</code></td>
-                <td>Embeddable login widget, returns auth code → token</td>
+                <td>SSO (OAuth2 Redirect)</td>
+                <td colspan="2">Redirect to <code>/sso-login-widget</code> → <code>POST /sso/authorize</code> + <code>/sso/token</code></td>
+                <td>OAuth2 authorization code flow with approval screen</td>
             </tr>
         </table>
 
@@ -1261,12 +1272,123 @@ await fetch('/api/submit-mining', {
 });
 // Backend watches chain for tx confirmation, then fulfills</code></pre>
 
-        <h3>Login Widget (SSO)</h3>
-        <div class="alert alert-warning">
-            <strong>⚠️ Legacy — SSO Widget (Not Recommended for New Apps)</strong><br>
-            The SSO Widget below opens a popup to <code>login.pentagon.games</code>. This is an older integration pattern maintained for existing SSO clients. <strong>For new apps, use the in-app login approach above instead</strong> (build your own form, call the API directly). It's simpler, more reliable, and gives you full control over the UX.
+        <h3>SSO Login Widget (OAuth2 Redirect Flow)</h3>
+        <div class="alert alert-info">
+            <strong>✅ Recommended for SSO Integration</strong><br>
+            Use this when you want users to authenticate via Pentagon Games and return to your site with a token. This is a standard OAuth2 authorization code flow with an approval screen.
         </div>
-        <p>For existing SSO client apps that already use the widget:</p>
+
+        <h4>How It Works</h4>
+        <ol>
+            <li>Your site redirects user to <code>https://pentagon.games/sso-login-widget</code> with OAuth2 parameters</li>
+            <li>User logs in on Pentagon Games (if not already authenticated)</li>
+            <li>User sees an approval screen: "Allow [Your App] to access your Pentagon Games account?"</li>
+            <li>User clicks Approve</li>
+            <li>Pentagon Games redirects back to your <code>redirect_uri</code> with an authorization code</li>
+            <li>Your backend exchanges the code for an access token via <code>POST /sso/token</code></li>
+        </ol>
+
+        <h4>Step 1: Register Your SSO Client</h4>
+        <p>Contact Pentagon Games team to register your app and get a <code>client_id</code> and <code>client_secret</code>. Provide:</p>
+        <ul>
+            <li><strong>App name:</strong> "Your App Name"</li>
+            <li><strong>Redirect URI(s):</strong> https://yourapp.com/auth/callback (must be HTTPS in production)</li>
+            <li><strong>App description:</strong> Brief description shown on approval screen</li>
+        </ul>
+
+        <h4>Step 2: Redirect User to SSO Login Widget</h4>
+        <pre><code>// When user clicks "Sign in with Pentagon Games" on your site:
+const params = new URLSearchParams({
+  client_id: 'YOUR_CLIENT_ID',
+  redirect_uri: 'https://yourapp.com/auth/callback',
+  response_type: 'code',
+  state: generateRandomState()  // CSRF protection, verify this on callback
+});
+window.location.href = `https://pentagon.games/sso-login-widget?${params}`;</code></pre>
+
+        <h4>Step 3: Handle the Callback</h4>
+        <p>After user approves, Pentagon Games redirects to your <code>redirect_uri</code> with query params:</p>
+        <pre><code>https://yourapp.com/auth/callback?code=AUTH_CODE_HERE&state=YOUR_STATE</code></pre>
+
+        <p>Your backend extracts the <code>code</code> and exchanges it for a token:</p>
+        <pre><code>// Backend endpoint: /auth/callback
+const { code, state } = req.query;
+
+// Verify state matches what you sent (CSRF protection)
+if (state !== req.session.oauthState) {
+  return res.status(400).json({ error: 'Invalid state' });
+}
+
+// Exchange code for token
+const tokenResponse = await fetch('https://api.account.pentagon.games/sso/token', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-PG-App-Key': 'YOUR_APP_KEY'
+  },
+  body: JSON.stringify({
+    grant_type: 'authorization_code',
+    code: code,
+    client_id: 'YOUR_CLIENT_ID',
+    client_secret: 'YOUR_CLIENT_SECRET',
+    redirect_uri: 'https://yourapp.com/auth/callback'
+  })
+});
+
+const { access_token, refresh_token, expires_in } = await tokenResponse.json();
+
+// Store tokens securely (server-side session or encrypted cookie)
+req.session.pgToken = access_token;
+
+// Redirect user to your app's main page
+res.redirect('/dashboard');</code></pre>
+
+        <h4>Step 4: Use the Access Token</h4>
+        <pre><code>// Call Pentagon Identity API on behalf of the user
+const userInfo = await fetch('https://api.account.pentagon.games/user/info', {
+  headers: {
+    'Authorization': `Bearer ${access_token}`,
+    'X-PG-App-Key': 'YOUR_APP_KEY'
+  }
+});
+
+const { result } = await userInfo.json();
+console.log(result.username, result.mm_address, result.nfts);</code></pre>
+
+        <h4>Refresh Token Flow</h4>
+        <p>Access tokens expire after 24 hours. Use the refresh token to get a new one without requiring the user to log in again:</p>
+        <pre><code>const refreshResponse = await fetch('https://api.account.pentagon.games/user/token/refresh', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-PG-App-Key': 'YOUR_APP_KEY'
+  },
+  body: JSON.stringify({
+    refresh: refresh_token
+  })
+});
+
+const { access } = await refreshResponse.json();
+// Update stored token
+req.session.pgToken = access;</code></pre>
+
+        <h4>Security Best Practices</h4>
+        <ul>
+            <li><strong>Always use HTTPS</strong> for redirect URIs in production</li>
+            <li><strong>Verify the <code>state</code> parameter</strong> to prevent CSRF attacks</li>
+            <li><strong>Store tokens server-side</strong> (session, encrypted database), never in localStorage</li>
+            <li><strong>Keep <code>client_secret</code> private</strong> — only use it on your backend, never expose to frontend</li>
+            <li><strong>Handle token expiration</strong> gracefully with refresh token flow</li>
+        </ul>
+
+        <hr style="margin: 40px 0; border: none; border-top: 1px solid #2a2a3a;">
+
+        <h3>Legacy SSO Widget (Popup-based)</h3>
+        <div class="alert alert-warning">
+            <strong>⚠️ Legacy — Popup Widget (Not Recommended for New Apps)</strong><br>
+            The popup-based SSO Widget below is maintained for existing SSO clients. <strong>For new integrations, use the OAuth2 redirect flow above.</strong> The redirect flow is more reliable, follows OAuth2 standards, and avoids popup blocker issues.
+        </div>
+        <p>For existing SSO client apps that already use the popup widget:</p>
 
         <pre><code>&lt;!-- Legacy SSO Widget — for existing SSO clients only --&gt;
 &lt;script src="https://login.pentagon.games/static/js/pgwidget-sdk-v1.js"&gt;&lt;/script&gt;
@@ -1279,7 +1401,7 @@ await fetch('/api/submit-mining', {
   });
 &lt;/script&gt;</code></pre>
 
-        <p>The widget opens a popup to login.pentagon.games, handles auth, and fires a <code>PentagonGamesSignInOnSuccess</code> event with the JWT token. Currently 5 SSO clients registered. <strong>New apps should use the <a href="#integration-patterns">in-app login pattern</a> instead.</strong></p>
+        <p>The legacy widget opens a popup to login.pentagon.games, handles auth, and fires a <code>PentagonGamesSignInOnSuccess</code> event with the JWT token. Currently 5 SSO clients registered. <strong>New apps should use the OAuth2 redirect flow above or the <a href="#integration-patterns">in-app login pattern</a>.</strong></p>
     </section>
 
     <!-- APP KEYS -->
