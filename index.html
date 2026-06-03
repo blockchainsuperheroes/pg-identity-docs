@@ -692,13 +692,17 @@ const gunnies = await fetch('https://api.account.pentagon.games/user/nfts?collec
                 <p>Login fields embedded directly in your page (sidebar, header, section). Simple and effective. Calls the API directly on submit.</p>
             </div>
             <div class="card" style="border-color: var(--red);">
-                <h4>🚫 Redirect to pentagon.games (WRONG)</h4>
-                <p><strong>Never do this.</strong> Do not redirect to pentagon.games/sign-in. Do not open login.pentagon.games in a popup window. Those pages are for pentagon.games itself and won't return tokens to your app.</p>
+                <h4>🚫 Redirect to pentagon.games/sign-in (WRONG for first-party)</h4>
+                <p><strong>Never do this for your own app's login.</strong> Do not redirect to pentagon.games/sign-in. Do not open login.pentagon.games in a popup window. Those pages are for pentagon.games itself and won't return tokens to your app. (Exception: the OAuth2 SSO flow for external third-party apps — see the SSO Login Widget section below.)</p>
             </div>
             <div class="card" style="border-color: var(--red);">
                 <h4>🚫 Browser Popup to login.pentagon.games (WRONG)</h4>
                 <p><strong>Never do this either.</strong> Opening a new browser window/popup to login.pentagon.games causes UX issues (popup doesn't close, token doesn't pass back, blocked by popup blockers). Use an in-page form instead.</p>
             </div>
+        </div>
+
+        <div class="alert alert-info" style="margin-top: 8px;">
+            <strong>Note — this section is about FIRST-PARTY login.</strong> If you are building your own app's login UI (Pentagon's own apps, or a partner embedding login directly), use the direct in-page pattern above. The one legitimate redirect to Pentagon is the standard <a href="#sso-widget">OAuth2 SSO flow</a> (redirect to <code>pentagon.games/sso-login-widget</code>), which is intended for <strong>external third-party apps</strong> that want "Sign in with Pentagon Games." That is a different, supported pattern — see the SSO Login Widget section below.
         </div>
 
         <h3>Reference Implementation</h3>
@@ -1272,10 +1276,11 @@ await fetch('/api/submit-mining', {
 });
 // Backend watches chain for tx confirmation, then fulfills</code></pre>
 
-        <h3>SSO Login Widget (OAuth2 Redirect Flow)</h3>
+        <h3 id="sso-widget">SSO Login Widget (OAuth2 Redirect Flow)</h3>
         <div class="alert alert-info">
-            <strong>✅ Recommended for SSO Integration</strong><br>
-            Use this when you want users to authenticate via Pentagon Games and return to your site with a token. This is a standard OAuth2 authorization code flow with an approval screen.
+            <strong>✅ For external third-party apps only ("Sign in with Pentagon Games")</strong><br>
+            Use this when an <strong>external partner app</strong> wants users to authenticate via Pentagon Games and return to their site with a token. This is a standard OAuth2 authorization code flow with an approval screen, and it is the one case where redirecting to <code>pentagon.games/sso-login-widget</code> is correct.<br><br>
+            <strong>First-party Pentagon apps (faucet, gunnies, vip, mining, etc.) should NOT use this.</strong> They use the <a href="#integration-patterns">direct in-page login</a> pattern (call <code>POST /user/login</code> with <code>X-PG-App-Key</code>) — no redirect, no popup.
         </div>
 
         <h4>How It Works</h4>
