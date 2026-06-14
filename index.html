@@ -382,8 +382,12 @@ X-PG-App-Key: pk_live_your_key
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_tron</td><td>Bearer</td><td>Connect Tron wallet</td></tr>
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_ton</td><td>Bearer</td><td>Connect TON wallet</td></tr>
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/updateAlgorand</td><td>Bearer</td><td>Connect Algorand wallet</td></tr>
-            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/walletinfo</td><td>Bearer</td><td>Get connected wallets</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/walletinfo</td><td>Bearer</td><td>Get connected wallets + internal AA/NPC wallet address, live PC balance, and NPC points</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/wallet/card-spend</td><td>Bearer</td><td>Spend NPC from the user's internal wallet (backend decrypts stored key + signs <code>CardSpendSplitter</code>)</td></tr>
         </table>
+        <div class="alert alert-warning">
+            <strong>Internal wallet = identity-owned.</strong> The internal PG wallet (AA / NPC wallet) is read and spent <em>only</em> through these identity endpoints with the standard login JWT. Never fetch it from mining (<code>api.mine.pentagon.games</code>) and never derive it from a seed. See <a href="#integration-patterns">Pattern 3: PG Login Only</a> for the full read + spend flow.
+        </div>
 
         <h3>NFT Data</h3>
         <table>
@@ -1067,20 +1071,64 @@ if (connectedAddress.toLowerCase() !== mm_address.toLowerCase()) {
 
         <h3>Pattern 3: PG Login Only (No Wallet)</h3>
         <div class="alert alert-info">
-            <strong>Used by:</strong> Pentagon.games profile pages, social features, NPC points system, internal tools
+            <strong>Used by:</strong> Pentagon ID Card, Pentagon.games profile pages, social features, NPC points system, internal tools
         </div>
-        <p>Pure PG Identity login with no wallet connection needed. The app uses the user's internal PG wallet (<code>centralised_wallet_address</code>) for any on-chain interactions, using NPC points as gas.</p>
+        <p>Pure PG Identity login with no external wallet connection needed. The app uses the user's <strong>internal PG wallet</strong> (also called the AA wallet / NPC wallet; field <code>centralised_wallet_address</code>) for any on-chain interactions, using NPC points as gas.</p>
 
-        <p><strong>Flow:</strong></p>
+        <div class="alert alert-warning">
+            <strong>⚠️ READ THIS FIRST — the internal wallet lives in PG Identity, nowhere else.</strong>
+            <p>The internal wallet (address + <em>encrypted</em> private key) is stored in the identity database <code>user_wallet</code> table. It is fully owned and served by the identity backend (<code>api.account.pentagon.games</code>). You access it with the <strong>standard login JWT</strong> — the same token login already gives you.</p>
+            <ul>
+                <li><strong>Do NOT call mining</strong> (<code>api.mine.pentagon.games</code>, <code>/v2/npc/wallet</code>) to read or spend a user's internal wallet. Mining does <em>not</em> own it — mining was only <em>borrowing</em> identity's stored wallet. Reaching into mining couples two services on an accidental auth contract and 401s the moment either side's JWT secret or token shape drifts. This caused a real outage on 2026-06-14.</li>
+                <li><strong>There is nothing to "derive".</strong> The wallet already exists for every real user. Any "derive from master seed + user_id" path is vestigial fallback code that never runs for funded users. Do not copy seeds between servers. Do not re-derive addresses.</li>
+                <li><strong>Each stack uses its own identity reads/signs.</strong> After a user logs in, your stack calls the identity API (read) or has the identity backend decrypt-and-sign (spend) with the user's stored key. You never reach into another product's stack (mining, gunnies, etc.) for the internal wallet.</li>
+            </ul>
+        </div>
+
+        <p><strong>Read flow (load the wallet + balance after login):</strong></p>
         <ol>
-            <li>User logs in via PG Identity → gets JWT</li>
-            <li>App calls <code>GET /user/info</code> → uses <code>centralised_wallet_address</code> for any chain interactions</li>
-            <li>Backend handles all transactions using the user's managed wallet</li>
-            <li>NPC points balance serves as internal gas</li>
+            <li>User logs in via PG Identity → gets JWT (one token, one backend, one secret)</li>
+            <li>App calls <code>GET /user/walletinfo</code> with <code>Authorization: Bearer &lt;login JWT&gt;</code></li>
+            <li>Response returns the internal <code>wallet_address</code> plus live <code>pc_balance</code> (queried from Pentagon Chain RPC by the identity backend) and <code>npc_points</code></li>
+            <li>Conversion: <strong>1 PC = 1000 NPC points</strong> (<code>npc_points = pc_balance × 1000</code>)</li>
         </ol>
+        <pre><code>GET https://api.account.pentagon.games/user/walletinfo
+Authorization: Bearer &lt;login JWT&gt;
 
-        <p><strong>When to use:</strong> Social features, points systems, profile management, any feature that doesn't require user-controlled wallet signing.</p>
-        <p><strong>Transaction handling:</strong> Fully backend-managed. User never signs transactions. Backend uses managed wallet with NPC points as gas abstraction.</p>
+// 200 OK
+{
+  "wallet_address": "0xc9e2D370...",   // the internal AA/NPC wallet, from user_wallet
+  "pc_balance": 2.949,                  // live PC, read from Pentagon RPC (chain 3344)
+  "npc_points": 2949,                   // pc_balance × 1000
+  "live_balance": true
+}</code></pre>
+
+        <p><strong>Spend flow (deduct NPC / move funds from the user's internal wallet):</strong></p>
+        <ol>
+            <li>User triggers a paid action (the card example: candy, cookie, flower, email, gift)</li>
+            <li>App POSTs the action to the identity backend with the login JWT</li>
+            <li>The identity backend validates the action + amount against a <strong>server-side allowlist</strong> (e.g. candy=5 NPC, gift up to 1000), resolves the recipient, then <strong>decrypts the user's stored private key</strong> (using the backend's own <code>WALLET_PASSWORD</code> / decrypt function) and signs the transaction itself</li>
+            <li>It returns the tx hash + remaining balance</li>
+        </ol>
+        <p>For the ID Card spend, the signed tx calls the on-chain <code>CardSpendSplitter</code> contract <code>0xf6f7b1615f7d3d2a0997848078dd200270304776</code>, which splits each payment <strong>30% to the recipient / 20% platform / 50% held for the spender</strong>. The contract is on-chain and not mining-owned, so any stack may call it directly with the user's stored key — no mining involvement.</p>
+        <pre><code>POST https://api.account.pentagon.games/user/wallet/card-spend
+Authorization: Bearer &lt;login JWT&gt;
+Content-Type: application/json
+
+{
+  "action": "candy" | "cookie" | "flower" | "email" | "gift",
+  "owner_handle": "nftprof",
+  "amount": 5
+}
+// → validate (allowlist) → resolve owner wallet → decrypt spender key
+//   → CardSpendSplitter.pay(owner) → returns { tx_hash, remaining_balance, split }</code></pre>
+
+        <p><strong>When to use:</strong> The Pentagon ID Card, social features, points systems, profile management, any feature that uses the user's managed internal wallet rather than a user-signed external wallet.</p>
+        <p><strong>Transaction handling:</strong> Fully backend-managed within the identity stack. The user never signs and never sees a seed. The identity backend already has everything it needs natively — <code>web3</code>, the Pentagon Chain config (chain 3344, RPC), the <code>user_wallet</code> record, and the decrypt-and-sign function. NPC points act as the gas/spend abstraction. <strong>Zero dependency on mining or any other product backend.</strong></p>
+
+        <div class="alert alert-info">
+            <strong>Building a new stack that needs the internal wallet?</strong> The recipe is always the same: (1) authenticate with PG Identity to get the login JWT; (2) <code>GET /user/walletinfo</code> for the address + live balance; (3) for spends, send the action to the identity backend and let it decrypt-and-sign with the stored key. Never read the internal wallet from mining; never derive it; never copy seeds. One token, one backend.
+        </div>
 
         <h3>Pattern 4: Wallet-First (PG Account Check)</h3>
         <div class="alert alert-info">
@@ -1460,7 +1508,7 @@ req.session.pgToken = access;</code></pre>
         <table>
             <tr><th>Table</th><th>Description</th></tr>
             <tr><td><code>user</code></td><td>Primary user accounts (email, username, password hash, created_at, referral info)</td></tr>
-            <tr><td><code>user_wallet</code></td><td>Primary EVM wallet binding (one per user, used for login and PNS resolution)</td></tr>
+            <tr><td><code>user_wallet</code></td><td>Primary EVM wallet binding + the user's <strong>internal PG wallet</strong> (AA / NPC wallet): address and <em>encrypted</em> private key. One per user. Used for login, PNS resolution, and identity-managed signing. This is the wallet mining reads — mining does not own it.</td></tr>
             <tr><td><code>user_external_wallets</code></td><td>Additional wallets: MultiversX, Tron, TON, Algorand, and secondary EVM wallets</td></tr>
             <tr><td><code>user_legacy_username</code></td><td>Old/renamed usernames retained for PNS NFT airdrop mapping</td></tr>
             <tr><td><code>user_login_history</code></td><td>Login event log (timestamp, IP, method, app key used)</td></tr>
