@@ -96,6 +96,7 @@
         .alert-warning { background: rgba(255,200,87,0.1); border-left: 3px solid var(--yellow); }
         .alert-info { background: rgba(124,92,255,0.1); border-left: 3px solid var(--accent); }
         .alert-success { background: rgba(61,220,132,0.1); border-left: 3px solid var(--green); }
+        .alert-danger { background: rgba(255,76,106,0.1); border-left: 3px solid var(--red); }
 
         /* TOC sidebar on large screens */
         @media (min-width: 1200px) {
@@ -123,6 +124,7 @@
         <a href="#overview" class="active">Overview</a>
         <a href="#getting-started">Getting Started</a>
         <a href="#auth">Authentication</a>
+        <a href="#user-resolution">User Resolution</a>
         <a href="#endpoints">Endpoints</a>
         <a href="#nft-platform">NFT Data</a>
         <a href="#integration-patterns">Patterns</a>
@@ -359,6 +361,59 @@ X-PG-App-Key: pk_live_your_key
         </table>
     </section>
 
+    <!-- USER RESOLUTION -->
+    <section id="user-resolution">
+        <h2>🧭 Resolving Users (Handle → Account)</h2>
+        <p>"Resolution" means turning a <em>handle</em> a user typed (or that another service passes in) into a concrete account. The identity backend supports several handle types, and they must always be tried in the <strong>same canonical order</strong>. Getting this wrong is the single most common identity bug: a partial resolver matches current username but misses PNS or legacy, and silently fails to find a real user.</p>
+
+        <div class="alert alert-danger">
+            <strong>⚠️ There is ONE canonical resolution order. Use it everywhere.</strong>
+            <ol style="margin:8px 0 0 0">
+                <li><strong>Email</strong> — exact match on <code>user.email</code> (case-insensitive)</li>
+                <li><strong>PNS name</strong> (primary) — lowercase on-chain Pentagon Name Service name → resolve to wallet → find the account whose bound <code>mm_address</code> matches</li>
+                <li><strong>Current username</strong> — exact match on <code>user.username</code> (case-insensitive)</li>
+                <li><strong>Legacy username</strong> — mapping lookup in <code>user_legacy_username</code> (airdrop/migration mapping only — see note)</li>
+            </ol>
+        </div>
+
+        <p><strong>Why the order matters:</strong> the same string can be valid at multiple layers (e.g. <code>nftprof</code> is a PNS name AND a legacy username of <code>nftprof1</code>). PNS is the primary identity system, so it must win before legacy. Email is checked first because it is unambiguous and cheapest.</p>
+
+        <h3>Internal (in-process) vs. Login resolution</h3>
+        <p>There are two contexts where resolution happens, and they share the <em>same order</em> but differ in scope:</p>
+        <table>
+            <tr><th>Context</th><th>Used by</th><th>Scope</th></tr>
+            <tr><td><strong>Login resolution</strong></td><td><code>POST /user/login</code></td><td>Email + PNS + current username. <strong>Legacy username login was removed</strong> (Apr 29, 2026) — it is NOT accepted as a login credential.</td></tr>
+            <tr><td><strong>Internal resolution</strong></td><td>Service-to-service / in-process lookups (e.g. the NPC card-spend handler turning a card owner handle into an account)</td><td>Full chain INCLUDING legacy mapping, because internal lookups ("who owns this card?") legitimately need to resolve old handles that can no longer log in.</td></tr>
+        </table>
+
+        <div class="alert alert-warning">
+            <strong>Internal callers must use the shared function, not the HTTP API.</strong> Anything running inside <code>pentagon-login-backend</code> has direct ORM access. Calling the backend's own REST endpoint to resolve a user is a localhost self-round-trip — slower, and it can deadlock the worker pool under load. Use the in-process resolver <code>resolve_account(handle)</code> (in <code>user/pns.py</code>). The public HTTP endpoint is for <strong>external</strong> consumers only.
+        </div>
+
+        <h3>One canonical resolver</h3>
+        <p>All paths — login, the card-spend handler, and any public lookup endpoint — must call a single shared <code>resolve_account(handle)</code> function. Three separate copies of "resolve a handle" previously existed and drifted apart (login did the full chain; <code>info_by_username/public</code> did username + legacy only, missing PNS; a third was added ad hoc). Duplicated resolvers <strong>will</strong> diverge. Centralize one, reuse it everywhere.</p>
+        <pre><code># Canonical internal resolver (user/pns.py) — call this, do not reimplement
+account = resolve_account(handle)   # tries email → PNS → username → legacy
+if account is None:
+    # handle did not resolve at ANY layer — fail loudly, do not assume username-only
+    ...</code></pre>
+
+        <div class="alert alert-danger">
+            <strong>⚠️ Known gap:</strong> <code>GET /user/info_by_username/public/&lt;username&gt;</code> currently resolves <strong>username + legacy only — it does NOT include the PNS layer</strong>. Do not treat it as a full resolver. If you need PNS resolution from an external context, this endpoint is insufficient; either it must be migrated onto <code>resolve_account()</code>, or you must treat it explicitly as username/legacy-only. Internal callers should bypass it entirely and use the shared function.
+        </div>
+
+        <h3>Normalization rules</h3>
+        <ul>
+            <li><strong>Handles are case-insensitive.</strong> Normalize input before matching (lowercase email and username comparisons).</li>
+            <li><strong>PNS names are lowercase on-chain.</strong> Always lowercase a PNS name before the contract lookup (e.g. <code>king</code>, not <code>King</code>).</li>
+            <li><strong>Legacy usernames are mapping-only.</strong> They resolve an account for internal lookups and airdrop mapping, but are NOT valid login credentials.</li>
+        </ul>
+
+        <div class="alert alert-info">
+            <strong>Net:</strong> document and centralize one resolver (email → PNS → username → legacy), reuse it in login, the spend handler, and any lookup endpoint, and tell internal services to call the function, not the HTTP API. This prevents the silent-resolution-failure class of bug for every future service that touches identity.
+        </div>
+    </section>
+
     <!-- ENDPOINTS -->
     <section id="endpoints">
         <h2>API Endpoints</h2>
@@ -369,7 +424,7 @@ X-PG-App-Key: pk_live_your_key
             <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info</td><td>Bearer</td><td>Current user's full profile</td></tr>
             <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info/detail</td><td>Bearer</td><td>Limited user info</td></tr>
             <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info/private</td><td>Bearer</td><td>Private user info</td></tr>
-            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info_by_username/public/&lt;username&gt;</td><td>None</td><td>Public profile lookup</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info_by_username/public/&lt;username&gt;</td><td>None</td><td>Public profile lookup. <strong>⚠️ Resolves username + legacy only — NOT PNS.</strong> See <a href="#user-resolution">User Resolution</a>; do not use as a full resolver.</td></tr>
             <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/check_username</td><td>API Key</td><td>Check username availability</td></tr>
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/edit_details</td><td>Bearer</td><td>Update profile</td></tr>
         </table>
