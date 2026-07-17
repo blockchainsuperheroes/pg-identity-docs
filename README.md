@@ -6,6 +6,8 @@ Public documentation for the Pentagon Identity API.
 
 ## Contents
 
+- **[White-label SSO integration guide](white-label-sso/README.md)** — passwordless email login for game titles: flows, response contract, new-brand request template, logo spec
+
 - Authentication methods (email, wallet, magic link, SSO)
 - Full endpoint reference
 - App Key system & migration guide
