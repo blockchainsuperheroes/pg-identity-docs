@@ -6,6 +6,10 @@ Public documentation for the Pentagon Identity API.
 
 ## Contents
 
+- **[PGAI wallet integration guide](pgai-wallet/README.md)** — the three account addresses
+  (`penai_address` / `mm_address` / `aa_wallet_address`), PGAI bind + rotation, wallet login,
+  and the encrypted cross-device sync relay
+
 - **[White-label SSO integration guide](white-label-sso/README.md)** — passwordless email login for game titles: flows, response contract, new-brand request template, logo spec
 
 - Authentication methods (email, wallet, magic link, SSO)

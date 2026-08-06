@@ -125,6 +125,7 @@
         <a href="#getting-started">Getting Started</a>
         <a href="#auth">Authentication</a>
         <a href="#user-resolution">User Resolution</a>
+        <a href="#pgai-wallet">PGAI Wallet</a>
         <a href="#endpoints">Endpoints</a>
         <a href="#nft-platform">NFT Data</a>
         <a href="#integration-patterns">Patterns</a>
@@ -302,8 +303,16 @@ X-PG-App-Key: pk_live_your_key
   "login_from": "your_app_name"
 }</code></pre>
         <p><strong>Message format:</strong> <code>Logging into Pentagon Games,{unix_timestamp_seconds}</code></p>
-        <p><strong>Timestamp window:</strong> Must be within 5 minutes of server time.</p>
-        <p><strong>Prerequisite:</strong> Wallet must be previously bound to an account via <code>/user/bind_metamask</code>.</p>
+        <p><strong>Timestamp window:</strong> Must be within 5 minutes of server time. The backend does not require a particular message <em>prefix</em> — it requires that the signature recovers to <code>address</code> and that the timestamp after the last comma is under 5 minutes old.</p>
+        <p><strong>Prerequisite:</strong> The address must already be registered on an account — either as <code>mm_address</code> (via <code>/user/bind_metamask</code>) <strong>or</strong> as <code>penai_address</code> (via <code>/user/penai/bind</code>).</p>
+
+        <div class="alert alert-info">
+            <strong>Wallet login now matches <code>mm_address</code> OR <code>penai_address</code>.</strong> A user's device-held Pentagon AI (PGAI) wallet is a full login credential — this is what powers silent re-login after unlock in the Pentagon AI clients. The Pentagon AI apps reuse the bind message <code>Sign up to Pentagon Games,{unix_timestamp_seconds}</code> verbatim. See <a href="#pgai-wallet">PGAI Wallet</a>.
+        </div>
+
+        <div class="alert alert-warning">
+            <strong><code>type</code> accepts only <code>"email"</code> and <code>"wallet"</code>.</strong> There is no <code>"username"</code>, <code>"pns"</code> or <code>"penai"</code> type — <code>"email"</code> runs the canonical <a href="#user-resolution">resolution chain</a> (email → PNS → username → legacy). Any other value is rejected with <code>{"status": false, "message": "Validation error", "erorlist": {"type": ["This field is required."]}}</code>.
+        </div>
 
         <h3>Successful Login Response</h3>
         <pre><code>{
@@ -414,6 +423,192 @@ if account is None:
         </div>
     </section>
 
+    <!-- PGAI WALLET -->
+    <section id="pgai-wallet">
+        <h2>🤖 PGAI Wallet (Pentagon AI)</h2>
+        <p>A Pentagon account can carry <strong>three different addresses</strong>, and integrators keep confusing them. They have different custody models and are <em>not</em> interchangeable. Read this table before you touch any wallet field.</p>
+
+        <div class="alert alert-danger">
+            <strong>⚠️ Three addresses, three owners.</strong> "The user's wallet" is not one thing.
+        </div>
+
+        <table>
+            <thead><tr><th>Field</th><th>User-facing name</th><th>Custody</th><th>Rotatable?</th><th>Chain</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td><code>penai_address</code></td>
+                    <td>Pentagon AI wallet (PGAI)</td>
+                    <td><strong>Self-custodial</strong> — key generated and held on the user's device. Pentagon never has it.</td>
+                    <td><span class="badge badge-green">Yes</span> (capped)</td>
+                    <td>Pentagon Chain (3344)</td>
+                </tr>
+                <tr>
+                    <td><code>mm_address</code></td>
+                    <td>Connected wallet</td>
+                    <td><strong>User's own external wallet</strong> (MetaMask, Rabby, Phantom, WalletConnect). Watch-only from our apps — we read it, we never sign with it.</td>
+                    <td><span class="badge badge-red">No</span> — one-time, irreversible</td>
+                    <td>Wherever the user's wallet lives</td>
+                </tr>
+                <tr>
+                    <td><code>aa_wallet_address</code></td>
+                    <td><strong>"PG Balance"</strong></td>
+                    <td><strong>Custodial</strong> — created at email signup. Pentagon holds the key server-side and signs on the user's behalf.</td>
+                    <td>n/a</td>
+                    <td>Pentagon Chain (3344)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="alert alert-warning">
+            <strong>⚠️ <code>aa_wallet_address</code> is NOT ERC-4337 account abstraction.</strong> Despite the <code>aa_</code> prefix it is a <strong>plain custodial EOA</strong> — a standard keypair created at signup, with the encrypted private key stored by the identity backend. No bundler, no EntryPoint, no UserOperation, no smart-contract wallet anywhere in this path.<br><br>
+            The name is retained purely for <strong>wire compatibility</strong>: it is the join key the EtherFantasy DNA service and other downstream consumers already index on. Do not infer 4337 semantics from the field name. <code>GET /user/walletinfo</code> returns the same value under both <code>wallet_address</code> and <code>aa_wallet_address</code>.
+        </div>
+
+        <h3>Which one do I use?</h3>
+        <ul>
+            <li><strong>"Who is this user?"</strong> → the PG account id from <code>GET /user/info</code>. Not an address.</li>
+            <li><strong>"Where do in-app rewards land / what does the user spend from?"</strong> → <code>aa_wallet_address</code> (PG Balance), via the identity endpoints. Never derive it from a seed, never fetch it from mining.</li>
+            <li><strong>"What external wallet did the user connect?"</strong> → <code>mm_address</code>. Read-only.</li>
+            <li><strong>"What is the user's on-device Pentagon AI wallet?"</strong> → <code>penai_address</code>.</li>
+        </ul>
+
+        <h3>Binding &amp; rotating the PGAI address</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/penai/bind</td><td>Bearer</td><td>Bind or <strong>rotate</strong> the caller's PGAI address</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/penai/history</td><td>Bearer</td><td>Every PGAI address this account has held + remaining rotations</td></tr>
+        </table>
+
+        <pre><code>POST /user/penai/bind
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+Content-Type: application/json
+
+{
+  "address":    "0xabc...",
+  "signature":  "0x...",
+  "message":    "Sign up to Pentagon Games,1753400000",
+  "login_from": "pentagon-ai-extension"
+}</code></pre>
+        <p><strong>Message format:</strong> <code>Sign up to Pentagon Games,{unix_timestamp_seconds}</code> — the same <code>personal_sign</code> (EIP-191) scheme as <code>/user/bind_metamask</code>.</p>
+        <p><strong>Timestamp window:</strong> the signature is rejected once the trailing timestamp is more than <strong>5 minutes</strong> old. Sign at call time; never cache a signed message.</p>
+        <p><strong><code>login_from</code>:</strong> optional, recorded in the address history so a client can later tell the user which app set up their account.</p>
+
+        <p>Success response:</p>
+        <pre><code>{
+  "status": true,
+  "result": { "penai_address": "0xabc..." }
+}</code></pre>
+
+        <div class="alert alert-info">
+            <strong>Rotatable — unlike <code>mm_address</code>.</strong> <code>/user/bind_metamask</code> is a one-time irreversible bind: a second call with a different address is refused. <code>/user/penai/bind</code> <strong>replaces</strong> the registered address, and the previous one is retained in the history with <code>released_at</code> stamped — it is never silently lost.
+        </div>
+
+        <div class="alert alert-warning">
+            <strong>Uniqueness is enforced.</strong> A PGAI address may belong to exactly one PG account. Binding an address that is already registered to a different account is refused with <code>{"status": false, "message": "This wallet is already linked to another Pentagon account."}</code>. A unique DB constraint backs the up-front check, so two simultaneous binds still fail safely rather than moving the address.
+        </div>
+
+        <h3>Rotation limits</h3>
+        <table>
+            <thead><tr><th>Cap</th><th>Value</th><th>Counts</th></tr></thead>
+            <tbody>
+                <tr><td>Lifetime</td><td><strong>5 distinct addresses</strong></td><td>Every distinct address the account has ever held</td></tr>
+                <tr><td>Rolling window</td><td><strong>3 binds per 30 days</strong></td><td>History rows created in the last 30 days (sliding, not calendar)</td></tr>
+            </tbody>
+        </table>
+        <p>Both caps are checked <strong>before</strong> anything is written — a refused rotation leaves the current address untouched. Hitting either returns <code>{"status": false, "message": "You have changed your Pentagon AI address too many times. Contact support."}</code></p>
+
+        <div class="alert alert-success">
+            <strong>Re-binding the SAME address is a free no-op.</strong> If <code>address</code> already equals the account's current <code>penai_address</code>, the call returns success, writes no history row, and <strong>does not consume a rotation</strong>. Clients may call bind idempotently on every unlock without burning the user's quota.
+        </div>
+
+        <h3>GET /user/penai/history</h3>
+        <pre><code>{
+  "status": true,
+  "result": {
+    "current": "0xnew...",
+    "addresses": [
+      { "address": "0xnew...", "bound_at": "2026-08-01T09:12:44.318Z", "released_at": null,                       "login_from": "pentagon-ai-telegram"  },
+      { "address": "0xold...", "bound_at": "2026-06-14T20:03:01.552Z", "released_at": "2026-08-01T09:12:44.318Z", "login_from": "pentagon-ai-extension" }
+    ],
+    "rotations_used": 2,
+    "rotations_remaining": 3
+  }
+}</code></pre>
+        <table>
+            <tr><th>Field</th><th>Meaning</th></tr>
+            <tr><td><code>current</code></td><td>The address currently bound. <code>""</code> if the user has never bound one.</td></tr>
+            <tr><td><code>addresses</code></td><td>Newest first. <code>released_at: null</code> marks the row for <code>current</code>; every other row carries the moment it was replaced.</td></tr>
+            <tr><td><code>login_from</code></td><td>Which app performed that bind — <code>""</code> when the client sent none.</td></tr>
+            <tr><td><code>rotations_used</code></td><td>Count of <strong>distinct</strong> addresses ever held (matches the lifetime cap).</td></tr>
+            <tr><td><code>rotations_remaining</code></td><td><code>5 - rotations_used</code>, floored at 0.</td></tr>
+        </table>
+
+        <h3>PGAI as a login credential</h3>
+        <p><code>POST /user/login</code> with <code>type: "wallet"</code> matches the signed address against <strong>either <code>mm_address</code> or <code>penai_address</code></strong>. A device-held PGAI key is therefore a full login credential — this is what powers silent re-login after unlock in the Pentagon AI clients. See <a href="#auth">Authentication</a>.</p>
+
+        <h3><code>login_from</code> values</h3>
+        <p>Sent on <code>POST /user/login</code>, <code>POST /user/bind_metamask</code> and <code>POST /user/penai/bind</code>. On the PGAI bind it is persisted into the address history.</p>
+        <table>
+            <tr><th>Value</th><th>Client</th></tr>
+            <tr><td><code>pentagon-ai-telegram</code></td><td>Pentagon AI on Telegram</td></tr>
+            <tr><td><code>pentagon-ai-extension</code></td><td>Pentagon AI browser extension</td></tr>
+            <tr><td><code>pentagon-ai-mobile</code></td><td>Pentagon AI mobile app</td></tr>
+            <tr><td><code>pentagon-ai</code></td><td>Generic fallback when a host app sets nothing</td></tr>
+        </table>
+        <p>It is <strong>client-supplied and unvalidated</strong> — treat it as a display hint, never as an authorisation signal. Third-party integrators should send their own app name.</p>
+
+        <h3>Cross-device wallet sync</h3>
+        <p>Moving a self-custodial PGAI wallet from a device that has it (<strong>source</strong>) to a device that wants it (<strong>target</strong>), without the seed ever reaching Pentagon.</p>
+
+        <div class="alert alert-danger">
+            <strong>🔒 The server is a DUMB RELAY.</strong> It stores <strong>only</strong> an ephemeral <em>public</em> key and an opaque ciphertext blob it <strong>cannot decrypt</strong>. Both devices must be authenticated as the <strong>same PG account</strong> — every view scopes its queryset to the calling user, so another account's channel id simply resolves to "Channel not found". Channels have a <strong>10-minute TTL</strong> and the ciphertext is <strong>single-read</strong>: <code>sync/fetch</code> hands it over exactly once, wipes it, and marks the channel <code>delivered</code>.
+        </div>
+
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/sync/open</td><td>Bearer</td><td>Target opens a channel with its ephemeral public key</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/sync/pending</td><td>Bearer</td><td>Source lists its own pending requests (never returns ciphertext)</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/sync/approve</td><td>Bearer</td><td>Source posts the sealed blob</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/sync/reject</td><td>Bearer</td><td>Source declines (terminal)</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/sync/fetch</td><td>Bearer</td><td>Target polls, then reads the blob once</td></tr>
+        </table>
+
+        <pre><code>POST /user/sync/open        { "target_pubkey": "&lt;base64&gt;", "target_label": "Chrome on Windows", "safety_code": "0042" }
+        →                    { "status": true, "result": { "channel_id": "...", "expires_in": 600 } }
+
+GET  /user/sync/pending
+        →                    { "status": true, "result": [ { "channel_id": "...", "target_pubkey": "&lt;base64&gt;",
+                                                            "target_label": "Chrome on Windows", "safety_code": "0042",
+                                                            "created_at": "2026-08-05T11:20:03.114Z" } ] }
+
+POST /user/sync/approve     { "channel_id": "...", "ciphertext": "&lt;opaque base64&gt;" }   → { "status": true }
+POST /user/sync/reject      { "channel_id": "..." }                                  → { "status": true }
+
+POST /user/sync/fetch       { "channel_id": "..." }
+        waiting →            { "status": true,  "result": { "state": "pending" } }
+        approved →           { "status": true,  "result": { "state": "approved", "ciphertext": "&lt;base64&gt;" } }
+        second fetch →       { "status": false, "message": "Already delivered" }
+        rejected →           { "status": false, "message": "Request was rejected on the other device" }</code></pre>
+
+        <p><code>target_pubkey</code> is required (≤200 chars); <code>target_label</code> (≤120) and <code>safety_code</code> (≤12) are optional and exist only so the source device can render a useful prompt. Channel ids are <strong>generated server-side</strong> — a caller cannot choose or guess one. Opening a channel <strong>supersedes</strong> the user's other pending channels, so the source only ever sees the latest request.</p>
+
+        <p><strong>Channel states:</strong> <code>pending</code> → <code>approved</code> → <code>delivered</code>, with <code>rejected</code> and <code>expired</code> as terminal side-exits.</p>
+
+        <p>The ciphertext is opaque to the backend — the encryption scheme is entirely a client concern. The reference Pentagon AI clients seal with ephemeral <strong>X25519</strong> key agreement → <strong>HKDF-SHA256</strong> (bound to both public keys) → <strong>XChaCha20-Poly1305</strong>, and show a 4-digit safety code derived from the public keys so the user can number-match both devices before approving.</p>
+
+        <div class="alert alert-warning">
+            <strong>Never send a seed, mnemonic or private key to any Pentagon endpoint.</strong> The relay carries ciphertext only. Keep the target's ephemeral secret key in memory for the life of the attempt — never persist it, never log it.
+        </div>
+
+        <div class="alert alert-info">
+            <strong>Full guide:</strong> request/response shapes, rotation semantics, error tables and a client checklist live in the <a href="pgai-wallet/">PGAI wallet integration guide →</a>
+        </div>
+
+        <div class="alert alert-info">
+            <strong>Error convention:</strong> application-level failures on these endpoints come back as <strong>HTTP 200</strong> with <code>"status": false</code>. Branch on <code>status</code>, not on the HTTP code. Only a missing or invalid JWT produces <code>401</code> (<code>{"detail": "Authentication credentials were not provided."}</code> / <code>{"detail": "Token is invalid"}</code>).
+        </div>
+    </section>
+
     <!-- ENDPOINTS -->
     <section id="endpoints">
         <h2>API Endpoints</h2>
@@ -421,7 +616,7 @@ if account is None:
         <h3>User Info</h3>
         <table>
             <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
-            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info</td><td>Bearer</td><td>Current user's full profile</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info</td><td>Bearer</td><td>Current user's full profile. Now includes <code>penai_address</code> (the PGAI wallet — empty until bound) alongside <code>mm_address</code>. See <a href="#pgai-wallet">PGAI Wallet</a>.</td></tr>
             <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info/detail</td><td>Bearer</td><td>Limited user info</td></tr>
             <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info/private</td><td>Bearer</td><td>Private user info</td></tr>
             <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/info_by_username/public/&lt;username&gt;</td><td>None</td><td>Public profile lookup. <strong>⚠️ Resolves username + legacy only — NOT PNS.</strong> See <a href="#user-resolution">User Resolution</a>; do not use as a full resolver.</td></tr>
@@ -432,16 +627,31 @@ if account is None:
         <h3>Wallet Binding</h3>
         <table>
             <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
-            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_metamask</td><td>Bearer</td><td>Connect EVM wallet</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_metamask</td><td>Bearer</td><td>Connect EVM wallet → <code>mm_address</code>. <strong>One-time and irreversible.</strong></td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/penai/bind</td><td>Bearer</td><td>Bind or <strong>rotate</strong> the PGAI wallet → <code>penai_address</code>. See <a href="#pgai-wallet">PGAI Wallet</a>.</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/penai/history</td><td>Bearer</td><td>Every PGAI address this account has held + remaining rotations</td></tr>
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_multiversx</td><td>Bearer</td><td>Connect MultiversX wallet</td></tr>
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_tron</td><td>Bearer</td><td>Connect Tron wallet</td></tr>
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/bind_ton</td><td>Bearer</td><td>Connect TON wallet</td></tr>
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/updateAlgorand</td><td>Bearer</td><td>Connect Algorand wallet</td></tr>
-            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/walletinfo</td><td>Bearer</td><td>Get connected wallets + internal AA/NPC wallet address, live PC balance, and NPC points</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/walletinfo</td><td>Bearer</td><td>Custodial platform account ("PG Balance") — returns <code>aa_wallet_address</code> (same value as <code>wallet_address</code>), live PC balance, and NPC points. <strong>Despite the name this is a custodial EOA, not ERC-4337</strong> — see <a href="#pgai-wallet">PGAI Wallet</a>.</td></tr>
             <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/wallet/card-spend</td><td>Bearer</td><td>Spend NPC from the user's internal wallet (backend decrypts stored key + signs <code>CardSpendSplitter</code>)</td></tr>
         </table>
         <div class="alert alert-warning">
             <strong>Internal wallet = identity-owned.</strong> The internal PG wallet (AA / NPC wallet) is read and spent <em>only</em> through these identity endpoints with the standard login JWT. Never fetch it from mining (<code>api.mine.pentagon.games</code>) and never derive it from a seed. See <a href="#integration-patterns">Pattern 3: PG Login Only</a> for the full read + spend flow.
+        </div>
+
+        <h3>Cross-Device Wallet Sync</h3>
+        <table>
+            <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/sync/open</td><td>Bearer</td><td>Target device opens a channel with its ephemeral public key</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td class="endpoint">/user/sync/pending</td><td>Bearer</td><td>Source device lists its own pending requests (never returns ciphertext)</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/sync/approve</td><td>Bearer</td><td>Source device posts the sealed blob</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/sync/reject</td><td>Bearer</td><td>Source device declines (terminal)</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td class="endpoint">/user/sync/fetch</td><td>Bearer</td><td>Target device polls, then reads the blob <strong>once</strong></td></tr>
+        </table>
+        <div class="alert alert-danger">
+            <strong>🔒 Dumb relay.</strong> The server stores only an ephemeral <em>public</em> key and a ciphertext it cannot decrypt. Both devices must be authenticated as the <strong>same PG account</strong>, channels expire after <strong>10 minutes</strong>, and the ciphertext is <strong>single-read</strong>. Full request/response shapes and the client checklist: <a href="#pgai-wallet">PGAI Wallet</a> / <a href="pgai-wallet/">integration guide</a>.
         </div>
 
         <h3>NFT Data</h3>
