@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wallets &amp; Points — Pentagon Identity Docs</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#0a0a0f;--surface:#12121a;--surface2:#1a1a26;--border:#2a2a3a;--text:#e0e0e8;--dim:#8888a0;--accent:#7c5cff;--green:#3ddc84;--red:#ff4c6a;--yellow:#ffc857;--code:#0d0d15}
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.65}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  .wrap{max-width:60rem;margin:0 auto;padding:40px 24px 80px}
+  h1{font-size:30px;margin-bottom:6px}
+  h2{font-size:21px;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--border)}
+  h3{font-size:16px;margin:18px 0 6px}
+  p{margin:8px 0;color:var(--text)}
+  .lead{color:var(--dim);font-size:16px;margin-bottom:8px}
+  .pill{display:inline-block;font-size:12px;background:rgba(124,92,255,.14);color:#b7a6ff;border:1px solid var(--border);border-radius:99px;padding:2px 10px;margin-bottom:14px}
+  code{background:var(--code);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:#d7cbff}
+  .box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:14px 0}
+  .box.good{border-color:rgba(61,220,132,.4)}
+  .box.warn{border-color:rgba(255,200,87,.45)}
+  .box b{color:var(--text)}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px;display:block;overflow-x:auto}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  td:first-child{color:#cfc7ff;white-space:nowrap}
+  .muted{color:var(--dim)}
+  .back{font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="back"><a href="index.html">← Pentagon Identity API docs</a></p>
+  <span class="pill">For every project that touches wallets, balance, or Points</span>
+  <h1>Wallets &amp; Points — the model, the rename, and what impacts you</h1>
+  <p class="lead">One reference for how a user's wallets and Points work, the current naming, and whether the ongoing custody upgrade affects your integration. <b>Short version: for most projects there is no code impact.</b></p>
+
+  <div class="box good"><b>TL;DR</b><br>
+    • Names: <code>AA</code> / <code>AA2</code> → <b>PG Balance</b> · <code>NPC</code> → <b>Points</b> · <code>PEN</code> → <b>$PC</b> · in-app self-custody wallet → <b>PGAI Wallet</b> · imported external wallets → <b>Connected (monitor-only)</b>.<br>
+    • <b>API/DB field names are unchanged</b> — <code>aa_wallet_address</code>, <code>penai_address</code>, <code>mm_address</code>, <code>npc_points</code> stay exactly as they are.<br>
+    • The custodial key storage is being upgraded to <b>per-wallet AWS-KMS envelope encryption with per-user, audited access</b>. The one real change: a service no longer gets blanket access to every user's wallet — you act on a user's custodial wallet only by <b>piggybacking on that user's authenticated login</b>.
+  </div>
+
+  <h2>The three things a user can have</h2>
+  <table>
+    <tr><th></th><th>PGAI Wallet</th><th>Connected wallet</th><th>PG Balance</th></tr>
+    <tr><td>API field</td><td><code>penai_address</code></td><td><code>mm_address</code></td><td><code>aa_wallet_address</code></td></tr>
+    <tr><td>Custody</td><td>User (self-custody, holds the seed)</td><td>External, <b>monitor-only</b></td><td>Pentagon (custodial)</td></tr>
+    <tr><td>After PGAI upgrade</td><td>The user's primary EOA</td><td>Watch-only — we display it, never sign with it</td><td>Custodial Points / $PC account</td></tr>
+    <tr><td>Who can spend</td><td>The user</td><td>Nobody via us (view only)</td><td>Pentagon backend, on the user's behalf</td></tr>
+  </table>
+  <p class="muted">Plain-language primer (safe to share with users): <a href="https://pentagon.games/pentagon-chain/pgai-wallet/">pentagon.games/pentagon-chain/pgai-wallet</a></p>
+
+  <h2>Points / NPC / $PC</h2>
+  <p><b>Points = NPC = <code>$PC × 1000</code></b>, and they live <b>only on the PG Balance</b> (never on the PGAI Wallet or a connected wallet). The balance is computed <b>live from on-chain</b> at read time — <code>/user/walletinfo</code> returns <code>npc_points = on-chain $PC × 1000</code> (<code>NPC_POINTS_PER_PC = 1000</code>). There is no cached balance to keep in sync.</p>
+  <div class="box good"><b>Impact: none.</b> Reading a user's balance / Points is unchanged.</div>
+
+  <h2>What the custody upgrade changes</h2>
+  <p>Custodial wallet keys are moving to a <b>per-wallet KMS envelope</b>: each wallet's key is individually encrypted, unlockable only through an IAM-scoped, audited path — there is no shared master key. During the rollout, each migrated PG Balance also rotates to a <b>fresh address</b> (its balance is swept over 1:1; the previous address is retained as <b>Legacy</b>).</p>
+  <div class="box warn"><b>Two things to be aware of:</b><br>
+    • A migrated user's <code>aa_wallet_address</code> <b>value</b> can change (the field name does not). Don't cache the address indefinitely; treat the old one as Legacy.<br>
+    • To sign/spend from a user's custodial wallet you now <b>piggyback on that user's login</b> (an authenticated, per-user grant) rather than a service-wide key. No integration gets access to all users' wallets.
+  </div>
+
+  <h2>Impact &amp; how to up-rev — find your row</h2>
+  <table>
+    <tr><th>What your project does</th><th>Impact</th><th>How to up-rev</th></tr>
+    <tr><td>Reads a user's balance / Points</td><td>None</td><td>Nothing — same endpoint, same ×1000 math</td></tr>
+    <tr><td>Reads a user's address(es)</td><td>Low — field names unchanged; <code>aa_wallet_address</code> value can change on migration</td><td>Don't cache the AA address forever; treat old as Legacy</td></tr>
+    <tr><td>Shows "AA wallet" / "NPC" labels</td><td>Cosmetic</td><td>Rename to "PG Balance" / "Points"; don't call the custodial account a "wallet"</td></tr>
+    <tr><td>Lets a user connect MetaMask/Rabby</td><td>Behavior — external EOAs are monitor-only (PGAI is the EOA)</td><td>Treat connected wallets as view-only; a wallet already linked elsewhere returns <code>wallet_already_linked</code> (anti-reuse, by design)</td></tr>
+    <tr><td><b>Signs/spends from a user's custodial wallet</b>, or expected access to all user wallets</td><td><b>Changes</b></td><td><b>Piggyback on the user's login → enqueue to the signer service. No service-wide wallet access.</b></td></tr>
+  </table>
+
+  <h2>Nomenclature map</h2>
+  <table>
+    <tr><th>You may see</th><th>Canonical now</th><th>Note</th></tr>
+    <tr><td>AA · AA2 · internal/platform wallet · "Pentagon account"</td><td><b>PG Balance</b></td><td>custodial; not ERC-4337</td></tr>
+    <tr><td>NPC · NPC Credits</td><td><b>Points</b></td><td><code>1 $PC = 1000 Points</code></td></tr>
+    <tr><td>PEN · PEN chain</td><td><b>$PC</b> · Pentagon Chain (3344)</td><td>token written <code>$PC</code></td></tr>
+    <tr><td>PenXR</td><td><b>Pentagon AI (PGAI)</b></td><td>same app, updated</td></tr>
+    <tr><td>penAIapp_address · "secondary address"</td><td><b>PGAI Wallet</b> (<code>penai_address</code>)</td><td>self-custody EOA</td></tr>
+    <tr><td>PG connected wallet (imported)</td><td><b>Connected wallet (monitor-only)</b></td><td><code>mm_address</code> / external</td></tr>
+  </table>
+  <div class="box"><b>API/DB field names never change</b> — only the user-facing labels and (for a migrated PG Balance) the address value. If your integration only reads fields, you are almost certainly unaffected.</div>
+
+  <p class="muted" style="margin-top:30px">Questions, or a case not covered here → the pg-identity / wallet team. Keep this the single source of truth for the wallet &amp; points model.</p>
+</div>
+</body>
+</html>
