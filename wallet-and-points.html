@@ -63,6 +63,20 @@
     • To sign/spend from a user's custodial wallet you now <b>piggyback on that user's login</b> (an authenticated, per-user grant) rather than a service-wide key. No integration gets access to all users' wallets.
   </div>
 
+  <h2>Worked example: a spend, and the "middle layer" AA2 adds</h2>
+  <p>This is the part that surprises people, so here it is concretely — using the AR game spend.</p>
+  <div class="box"><b>Old model</b> — broadly, an app could cause a custodial spend that went straight to a target contract. That's why it felt like "any app could use the wallets."</div>
+  <div class="box good"><b>New model (AA2)</b> — three parties, one integration point, and a deliberate split of duties:
+    <table style="margin-top:10px">
+      <tr><th>Party</th><th>Role</th><th>Can it move the money?</th></tr>
+      <tr><td>The <b>app</b> (e.g. AR)</td><td><b>Initiates</b> — it holds the user's login (JWT) and calls the custody API with a unique idempotency key. No keys, and it does <b>not</b> name the target.</td><td>No — it can only ask</td></tr>
+      <tr><td><b>Custody</b> (pg-identity backend)</td><td><b>Aims &amp; signs</b> — inside the user's authenticated session, it signs the transaction from the user's wallet to a <b>fixed</b> target.</td><td>Yes — the only party that can</td></tr>
+      <tr><td>The <b>contract</b> team</td><td>Provides the <b>surface</b> the signed tx calls.</td><td>No — it just receives</td></tr>
+    </table>
+  </div>
+  <p><b>Live example:</b> the AR app calls <code>POST /user/npc/spend_ar</code> with the user's JWT + an <code>idempotency_key</code>; custody signs <code>GamePayHub.payPC(2, keccak256(idempotency_key))</code> from the user's wallet, value = the full spend. The app never sees a key and never names the contract.</p>
+  <div class="box warn"><b>Why the app can't just do it itself:</b> it has no key (custody holds it), and — the important part — under AA2 the caller <b>cannot name the target contract</b>. If it could, any app holding a user's session could point that user's custodial funds anywhere. Fixing the target inside custody is the security upgrade, not a bottleneck. (Hashing the idempotency key can live in the app or in custody — it's a convention, not a privilege.)</p>
+
   <h2>Impact &amp; how to up-rev — find your row</h2>
   <table>
     <tr><th>What your project does</th><th>Impact</th><th>How to up-rev</th></tr>
