@@ -159,7 +159,7 @@
             <strong>Exception:</strong> native apps and webviews should take a session handoff from the host app
             instead of opening a popup.<br><br>
             <strong>👉 Read the canonical integration standard first:</strong>
-            <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget/blob/main/PENTAGON-LOGIN-STANDARD.md">PENTAGON-LOGIN-STANDARD.md</a>.
+            <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget-pill/blob/main/PENTAGON-LOGIN-STANDARD.md">PENTAGON-LOGIN-STANDARD.md</a>.
             The rest of this page is the <strong>API reference</strong> (endpoints, user resolution, wallet binding,
             NFT data, VIP) and remains current.
         </div>
@@ -215,7 +215,7 @@
             <strong>🚫 NEVER redirect or open a popup/new window to pentagon.games or login.pentagon.games.</strong> This is the #1 integration mistake. Those pages are for pentagon.games itself, not for your app.<br><br>
             <strong>✅ Correct approach:</strong> Put the login form <strong>directly on your page</strong>. An inline form, a modal overlay in your DOM, or a dedicated login page on YOUR domain. Your form collects email/password (or wallet signature), calls <code>POST /user/login</code> with your <code>X-PG-App-Key</code>, and gets a JWT back. The user never leaves your page, no new windows open, no redirects happen.<br><br>
             This is how pentagon.games, gunnies.io, vip.pentagon.games, and mining.pentagon.games all work. Each site has its own login form that calls the API directly.<br><br>
-            Reference code: <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget">github.com/blockchainsuperheroes/pentagon-login-widget</a> — drop-in React component, vanilla JS, and API-only examples.
+            Reference code: <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget-pill">github.com/blockchainsuperheroes/pentagon-login-widget-pill</a> — drop-in React component, vanilla JS, and API-only examples.
         </div>
     </section>
 
@@ -497,8 +497,10 @@ if account is None:
         </table>
 
         <div class="alert alert-warning">
-            <strong>⚠️ <code>aa_wallet_address</code> is NOT ERC-4337 account abstraction.</strong> Despite the <code>aa_</code> prefix it is a <strong>plain custodial EOA</strong> — a standard keypair created at signup, with the encrypted private key stored by the identity backend. No bundler, no EntryPoint, no UserOperation, no smart-contract wallet anywhere in this path.<br><br>
-            The name is retained purely for <strong>wire compatibility</strong>: it is the join key the EtherFantasy DNA service and other downstream consumers already index on. Do not infer 4337 semantics from the field name. <code>GET /user/walletinfo</code> returns the same value under both <code>wallet_address</code> and <code>aa_wallet_address</code>.
+            <strong>⚠️ <code>aa_wallet_address</code> is the CANONICAL address — and as of the AA2 migration it may be a smart-contract account.</strong> Read it; never assume what kind of address it is.<br><br>
+            <strong>Before a user migrates</strong> it is a plain custodial EOA — a keypair created at signup whose encrypted private key the identity backend holds.
+            <strong>After they migrate</strong> it is that user’s <strong>AA2 account</strong>: a deployed smart contract that can only send to allow-listed targets, whose owner key the backend holds. It is <strong>not</strong> ERC-4337 — still no bundler, no EntryPoint, no UserOperation — but it <strong>is</strong> a contract, so it has code, and anything that assumes an EOA (for example paying an on-chain prize to it) must not use this address. Use <code>mm_address</code> for the user’s own external wallet.<br><br>
+            <code>GET /user/walletinfo</code> returns the same canonical value under both <code>wallet_address</code> and <code>aa_wallet_address</code>. See <a href="#aa2-migration">the AA2 migration section</a> for what every integrator must change.
         </div>
 
         <h3>Which one do I use?</h3>
@@ -1012,7 +1014,7 @@ const gunnies = await fetch('https://api.account.pentagon.games/user/nfts?collec
         </div>
 
         <h3>Reference Implementation</h3>
-        <p>Drop-in login components supporting all 4 sign-in methods. Uses your own App Key, no redirect needed. Full source on GitHub: <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget">pentagon-login-widget</a></p>
+        <p>Drop-in login components supporting all 4 sign-in methods. Uses your own App Key, no redirect needed. Full source on GitHub: <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget-pill">pentagon-login-widget-pill</a></p>
 
         <div class="tabs">
             <div class="tab active" onclick="switchTab(event, 'tab-react-modal')">React (Modal)</div>
@@ -1429,7 +1431,88 @@ Content-Type: application/json
         <p><strong>Transaction handling:</strong> Fully backend-managed within the identity stack. The user never signs and never sees a seed. The identity backend already has everything it needs natively — <code>web3</code>, the Pentagon Chain config (chain 3344, RPC), the <code>user_wallet</code> record, and the decrypt-and-sign function. NPC points act as the gas/spend abstraction. <strong>Zero dependency on mining or any other product backend.</strong></p>
 
         <div class="alert alert-info">
-            <strong>Building a new stack that needs the internal wallet?</strong> The recipe is always the same: (1) authenticate with PG Identity to get the login JWT; (2) <code>GET /user/walletinfo</code> for the address + live balance; (3) for spends, send the action to the identity backend and let it decrypt-and-sign with the stored key. Never read the internal wallet from mining; never derive it; never copy seeds. One token, one backend.
+            <strong>Building a new stack that needs the internal wallet?</strong> The recipe is always the same: (1) sign the user in with <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget-pill/blob/main/PENTAGON-LOGIN-STANDARD.md">the pill</a> to get the login JWT; (2) <code>GET /user/walletinfo</code> for <code>aa_wallet_address</code> + <code>npc_points</code>; (3) for spends, send the action to the identity backend, which signs it the right way for that user — the legacy key before migration, an AA2 <code>execute()</code> after. Never read the internal wallet from mining, from Postgres, or from <code>centralised_wallet_address</code>; never derive it; never copy seeds. One token, one backend.
+        </div>
+
+        <div id="aa2-migration" class="alert alert-warning" style="border-left-width: 5px;">
+            <h3 style="margin-top:0">⚠️ AA2 migration — what every integrator must change</h3>
+            <p>Every Pentagon user’s <strong>Points</strong> (custodial PC on Pentagon Chain 3344; 1 PC = 1000 Points)
+            is moving from a plain custodial wallet to a per-user <strong>AA2 smart-contract account</strong>. After a
+            user migrates, their old address is swept to about zero and their Points live at the AA2 account.
+            <strong><code>mm_address</code> — the user’s own connected wallet — never changes.</strong></p>
+
+            <p><strong>You probably do not need to build anything.</strong> Spending is handled centrally:
+            purchases go through <strong>payments.pentagon.games/stores</strong>, which already pays from the user’s
+            AA2 account, and in-game Points spends already go through the identity endpoints below. For most
+            integrations this is a front-end change only, and it is one rule:</p>
+
+            <p style="font-size:17px"><strong>→ Read <code>aa_wallet_address</code> and <code>npc_points</code> from
+            <code>GET /user/walletinfo</code> (nested under <code>result</code>). Never derive, cache or hard-code an address.</strong></p>
+            <p><code>aa_wallet_address</code> is correct for both migrated and unmigrated users, so do not branch.</p>
+
+            <h4>Do not use</h4>
+            <table>
+                <thead><tr><th>Field / source</th><th>Why not</th></tr></thead>
+                <tbody>
+                <tr><td><code>centralised_wallet_address</code> (from <code>/user/info</code>)</td><td>still the legacy address — migrated users read about 0</td></tr>
+                <tr><td><code>user_wallet.address</code> read from Postgres</td><td>same, and no service should read identity’s database</td></tr>
+                <tr><td><code>aa2_address</code> directly</td><td>can exist before the user is migrated — value sent there sits unread</td></tr>
+                <tr><td><code>has_aa2</code> as a branch</td><td>unnecessary; <code>aa_wallet_address</code> is already correct</td></tr>
+                <tr><td>a derived address (HD / seed, e.g. <code>NPC_MASTER_SEED</code>)</td><td>never matched identity; it is a real bug</td></tr>
+                <tr><td>an address taken from the request body</td><td>lets a caller redirect someone else’s payout — resolve from the session</td></tr>
+                </tbody>
+            </table>
+
+            <h4>Fields on <code>/user/walletinfo</code></h4>
+            <table>
+                <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+                <tbody>
+                <tr><td><code>npc_points</code></td><td>AA2 + any legacy residual about to be swept. <strong>Display this.</strong></td></tr>
+                <tr><td><code>npc_points_aa2</code></td><td>Spendable right now. <strong>Gate affordability on this.</strong></td></tr>
+                <tr><td><code>npc_points_legacy</code></td><td>Residual on the old address; the sweeper moves it within about 2 minutes</td></tr>
+                <tr><td><code>balance_settling</code></td><td><code>true</code> while that residual is moving — show a subtle note, do not block</td></tr>
+                <tr><td><code>migration_state</code></td><td>exactly <code>legacy_only</code> or <code>aa2</code>. No other value exists</td></tr>
+                <tr><td><code>mm_address</code></td><td>the user’s own external wallet — unchanged by migration</td></tr>
+                <tr><td><code>legacy_address</code></td><td>the old custodial address (see “pre-migration records” below)</td></tr>
+                </tbody>
+            </table>
+
+            <h4>Spending Points</h4>
+            <p>Never sign a custodial spend yourself and never hold a custodial key. Call identity and it picks the
+            right path per user (legacy key, or AA2 <code>execute()</code>):
+            <code>POST /user/npc/spend_ar</code> (AR / PayHub, returns the paying <code>spender</code>),
+            <code>POST /user/npc/spend</code> (card),
+            <code>POST /user/npc/spend_purchase</code> (processor),
+            <code>POST /user/aa/execute</code> (named on-chain actions; JWT <em>and</em> the owning server App Key).</p>
+
+            <h4>Pre-migration records — match both addresses</h4>
+            <p>Anything you stored keyed by a user’s address before the migration holds the legacy address. When
+            looking those up, match <strong><code>aa_wallet_address</code> or <code>legacy_address</code></strong>,
+            case-insensitively. Typical cases: hosted-order or “by buyer” sweeps, and claim or receipt tables keyed on the payer.</p>
+
+            <h4>Server-to-server</h4>
+            <p>Without a user token: <code>GET /user/wallet_lookup?user_id=</code> or <code>?address=</code> (any custodial
+            address, legacy or AA2) → <code>aa_wallet_address</code>. To resolve an <em>external</em> payer’s address:
+            <code>GET /user/lookup_by_address?address=&amp;view=canonical</code> → <code>result[0].recipient</code>.
+            Both accept a <strong>server</strong> App Key via <code>X-PG-App-Key</code>; web and native keys are rejected,
+            and <code>view=canonical</code> strips PII. If a key sets <code>allowed_ips</code>, it is enforced.</p>
+
+            <h4>DNA (AR / PayHub titles)</h4>
+            <p><strong>DNA is never delivered to the AA2 account</strong> — the hub refuses a recipient that has code,
+            and the AA2 account is a contract. DNA goes to the user’s own EOA, or their PGAI wallet if they have no EOA.
+            DNA is <strong>soulbound</strong>: it moves only via mint/burn or the approved primary and secondary DNA
+            stores. The DNA meter is keyed on <code>aa_wallet_address</code>; resolve the <code>spender</code> you pass
+            to the keeper <strong>server-side from the user’s session</strong>, never from the client.</p>
+
+            <h4>Checklist</h4>
+            <ul>
+                <li>Grep for <code>centralised_wallet_address</code>, <code>user_wallet</code>, <code>NPC_MASTER_SEED</code>, <code>wallet_address</code>, and any hard-coded address.</li>
+                <li>Balance display reads <code>npc_points</code>; affordability reads <code>npc_points_aa2</code>.</li>
+                <li>Deposit / “top up” shows <code>aa_wallet_address</code>.</li>
+                <li>Selling something? It is an item in <strong>/stores</strong> — link there rather than building a payment path.</li>
+                <li>Address-keyed history matches <code>aa_wallet_address</code> <em>or</em> <code>legacy_address</code>.</li>
+                <li>Identity calls are server-side, or your exact origin is confirmed on the CORS allowlist.</li>
+            </ul>
         </div>
 
         <h3>Pattern 4: Wallet-First (PG Account Check)</h3>

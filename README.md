@@ -37,7 +37,7 @@ Every Pentagon front-end signs in through **the pill** (the PC Connector). Do no
 login form: that guidance is withdrawn, and it led several sites to collect real Pentagon passwords
 on their own origins.
 
-**Canonical standard:** [PENTAGON-LOGIN-STANDARD.md](https://github.com/blockchainsuperheroes/pentagon-login-widget/blob/main/PENTAGON-LOGIN-STANDARD.md)
+**Canonical standard:** [PENTAGON-LOGIN-STANDARD.md](https://github.com/blockchainsuperheroes/pentagon-login-widget-pill/blob/main/PENTAGON-LOGIN-STANDARD.md)
 
 ```html
 <div data-pc-connector></div>
@@ -48,6 +48,20 @@ The pill shows balances as well as handling login, and that is the point: no wal
 and MetaMask will not show $PC unless the user has added chain 3344 by hand.
 
 This repo remains the **API reference** — endpoints, user resolution, wallet binding, NFT data, VIP.
+
+## AA2 migration — read if you display a balance or an address
+
+Every user’s Points are moving to a per-user **AA2 smart-contract account**. After a user migrates,
+their old custodial address is swept to ~0.
+
+> **Read `aa_wallet_address` and `npc_points` from `GET /user/walletinfo`** (nested under `result`).
+> Never use `centralised_wallet_address`, never read `user_wallet` from Postgres, never derive an
+> address, never hard-code one. All of those show **0 Points** after migration.
+
+`mm_address` (the user’s own wallet) never changes. Spending is central: purchases go through
+**payments.pentagon.games/stores**, which already pays from AA2, so most integrations need no new
+payment path. Full detail, including the server-to-server lookups and the DNA rules:
+[AA2 migration section](https://blockchainsuperheroes.github.io/pg-identity-docs/#aa2-migration).
 
 ## App Keys
 
