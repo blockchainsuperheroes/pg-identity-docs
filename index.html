@@ -1441,6 +1441,17 @@ Content-Type: application/json
             user migrates, their old address is swept to about zero and their Points live at the AA2 account.
             <strong><code>mm_address</code> — the user’s own connected wallet — never changes.</strong></p>
 
+            <p><strong>What Points are, and why AA2 exists.</strong> Points (“PG Balance”) are an in-game
+            <strong>top-up balance</strong> — bought, not earned — that happens to be recorded on-chain. The chain is
+            simply the ledger; there is no separate off-chain balance. Crucially, <strong>Points are not transferable
+            by the user</strong>: an AA2 account can only call allow-listed contracts, so Points can be spent across the
+            ecosystem but can never be sent to another person’s wallet or cashed out. AA2 is what makes that
+            structural rather than a policy. <strong>Do not describe Points as crypto, tokens or something the user can
+            withdraw or send</strong> — they are custodial, non-transferable and spend-only. The self-custody opposite
+            is the <strong>PGAI wallet</strong>, which holds $PC the user really does own and can move; keep the two
+            clearly separated in copy. Deposits and top-ups must credit <code>aa_wallet_address</code>
+            <strong>directly</strong>; the residual sweeper is a safety net for strays, not part of the design.</p>
+
             <p><strong>You probably do not need to build anything.</strong> Spending is handled centrally:
             purchases go through <strong>payments.pentagon.games/stores</strong>, which already pays from the user’s
             AA2 account, and in-game Points spends already go through the identity endpoints below. For most
