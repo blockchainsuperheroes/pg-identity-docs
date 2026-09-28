@@ -145,14 +145,23 @@
         <p>Authentication, user profiles, wallet binding, NFT data, and social integrations for Pentagon Games ecosystem.</p>
 
         <div class="alert alert-warning" style="font-size: 16px; max-width: 700px; margin: 24px auto; text-align: left; border-left-width: 5px;">
-            <strong>🚫 DO NOT redirect or popup to pentagon.games/sign-in or login.pentagon.games.</strong><br>
-            Build your login form <strong>directly on your page</strong> and call the Pentagon Identity API from it. No redirects. No browser popups to external sites. Your app shows the form, your app calls <code>POST /user/login</code>, your app gets the JWT. The user never leaves your page.<br><br>
-            <strong>4 sign-in methods, all via the same <code>POST /user/login</code> API:</strong><br>
-            1. Email + Password<br>
-            2. PNS Username + Password<br>
-            3. Wallet Signature (MetaMask/Rabby/Phantom)<br>
-            4. Magic Link (passwordless email)<br><br>
-            See <a href="#integration-patterns">Integration Patterns</a> for drop-in React &amp; vanilla JS code, or the <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget">pentagon-login-widget</a> repo for a standalone reference implementation.
+            <strong>👉 Sign users in with the Pentagon pill. Do not build your own login form.</strong><br>
+            This replaces the previous guidance on this page, which told integrators to build a password form on
+            their own origin. That advice is <strong>withdrawn</strong>: it led several sites to collect real Pentagon
+            passwords on game origins. If you have one, remove it.<br><br>
+            <strong>The two-line embed:</strong><br>
+            <code>&lt;div data-pc-connector&gt;&lt;/div&gt;</code><br>
+            <code>&lt;script src="https://pentagon.games/connector/pc-connector.js" data-client-id="your-client-id"&gt;&lt;/script&gt;</code><br>
+            (<code>data-client-id</code> is required off pentagon.games; ask the Pentagon team to register your exact origin.)<br><br>
+            <strong>The pill also shows balances, and that is the point.</strong> MetaMask will not show $PC on Pentagon
+            Chain unless the user has manually added chain 3344, and no wallet can ever show Points, which are an
+            account balance rather than a token. A user who connects and sees nothing concludes they hold nothing.<br><br>
+            <strong>Exception:</strong> native apps and webviews should take a session handoff from the host app
+            instead of opening a popup.<br><br>
+            <strong>👉 Read the canonical integration standard first:</strong>
+            <a href="https://github.com/blockchainsuperheroes/pentagon-login-widget/blob/main/PENTAGON-LOGIN-STANDARD.md">PENTAGON-LOGIN-STANDARD.md</a>.
+            The rest of this page is the <strong>API reference</strong> (endpoints, user resolution, wallet binding,
+            NFT data, VIP) and remains current.
         </div>
         <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center;">
             <span class="badge badge-green">v2.0 — Live</span>
@@ -161,13 +170,22 @@
     </div>
 
     <div class="alert alert-warning">
-        <strong>⚠️ Migration Deadline: May 28, 2026</strong> — All login/signup requests must include an <code>X-PG-App-Key</code> header. Currently in soft mode (warnings only). <a href="#migration">See migration guide →</a>
+        <strong>App Keys: still soft mode</strong> (verified 2026-09-28). <code>X-PG-App-Key</code> is
+        <strong>logged but not enforced</strong> on login/signup: <code>APPKEY_ENFORCE</code> is off in production, so
+        requests without a key are <strong>not</strong> rejected. The old "May 28, 2026" deadline passed without
+        enforcement being switched on. Send the header anyway — enforcement can be enabled at any time, and it is
+        required today by some endpoints (e.g. <code>/user/aa/execute</code>, <code>/user/wallet_lookup</code>).
+        <a href="#migration">See migration guide →</a><br><br>
+        <strong>⚠️ A registered client id does NOT grant API CORS.</strong> Sign-in registration and the API's
+        <code>CORS_ALLOWED_ORIGINS</code> are separate lists and they have drifted, so a site can sign a user in and
+        still be blocked from reading that user's balance in the browser. <strong>Call this API server-side</strong>
+        unless your exact origin is confirmed to be on the CORS allowlist.
     </div>
 
     <!-- GETTING STARTED -->
     <section id="getting-started" style="border: 2px solid var(--accent); border-radius: 12px; padding: 28px; background: rgba(124,92,255,0.06);">
         <h2 style="border-bottom-color: var(--accent);">🚀 Getting Started</h2>
-        <p style="color: var(--text); font-size: 16px;">Before you can use the Pentagon Identity API, you <strong>must</strong> have an App Key. Requests without a valid key will be rejected starting May 28, 2026.</p>
+        <p style="color: var(--text); font-size: 16px;">Get an App Key before you use the Pentagon Identity API. Keys are <strong>logged but not yet enforced</strong> on login/signup (verified 2026-09-28), and some endpoints already require one. Use a <strong>web</strong> key in browser code; <strong>server</strong> keys must never ship to a browser.</p>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 20px 0;">
             <div class="card" style="border-color: var(--accent);">
@@ -190,7 +208,7 @@
         </div>
 
         <div class="alert alert-info" style="margin-bottom: 0;">
-            <strong>Current status:</strong> App Key enforcement is in <strong>soft mode</strong> (warnings only in server logs). Full enforcement begins <strong>May 28, 2026</strong>, after which requests without a valid key will receive HTTP 401. <a href="#migration">See migration timeline →</a>
+            <strong>Current status (verified 2026-09-28):</strong> App Key enforcement is in <strong>soft mode</strong> — missing keys are logged as <code>APPKEY_MISSING</code> and the request still succeeds. The May 28, 2026 date passed without enforcement being enabled; there is no new date. Treat the header as required anyway. <a href="#migration">See migration timeline →</a>
         </div>
 
         <div class="alert alert-warning" style="margin-top: 16px; font-size: 15px; border-left-width: 5px;">
@@ -1902,7 +1920,7 @@ req.session.pgToken = access;</code></pre>
         <h2>Migration Guide</h2>
 
         <div class="alert alert-warning">
-            <strong>Deadline: May 28, 2026</strong> — After this date, requests without a valid <code>X-PG-App-Key</code> header will be rejected with HTTP 401 on all login/signup endpoints.
+            <strong>Status: not yet enforced (verified 2026-09-28).</strong> The May 28, 2026 deadline passed without enforcement being switched on, and no new date is set. When it is enabled, login/signup requests without a valid <code>X-PG-App-Key</code> header will be rejected with HTTP 401.
         </div>
 
         <h3>Step 1: Get Your Key</h3>
@@ -2018,7 +2036,8 @@ if data["status"]:
             <tr><td>Apr 28, 2026</td><td><span class="badge badge-green">Now</span> CORS locked. App Keys live in soft mode (warnings only)</td></tr>
             <tr><td>May 12, 2026</td><td>Check-in. Review logs for apps still missing keys</td></tr>
             <tr><td>May 21, 2026</td><td>Final warning to any app without a key</td></tr>
-            <tr><td><strong>May 28, 2026</strong></td><td><span class="badge badge-red">Enforcement</span> Requests without keys rejected with 401</td></tr>
+            <tr><td><strong>May 28, 2026</strong></td><td><span class="badge badge-red">Missed</span> Planned enforcement date — passed, enforcement NOT enabled</td></tr>
+            <tr><td>Sep 28, 2026</td><td><span class="badge badge-green">Now</span> Still soft mode. Sign-in moves to the pill; hand-rolled login forms withdrawn</td></tr>
         </table>
     </section>
 
@@ -2045,7 +2064,7 @@ if data["status"]:
             <tr><th>Key Type</th><th>Rate Limit</th></tr>
             <tr><td>VIP User Key (<code>uk_live_</code>)</td><td>60 requests / minute</td></tr>
             <tr><td>App Key (<code>pk_live_</code>)</td><td>100 requests / minute</td></tr>
-            <tr><td>No key (deprecated)</td><td>Will be rejected after May 28</td></tr>
+            <tr><td>No key (deprecated)</td><td>Logged only today; will be rejected when enforcement is enabled</td></tr>
         </table>
 
         <h3>Usage</h3>
