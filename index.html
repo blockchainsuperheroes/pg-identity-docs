@@ -386,13 +386,31 @@ X-PG-App-Key: pk_live_your_key
             </ol>
         </div>
 
+        <h3>Why usernames look the way they do (history — read before touching names)</h3>
+        <ol>
+            <li><strong>Originally</strong> users picked their own usernames, case-sensitive: <code>Jon</code>, <code>JON</code> and <code>JoN</code> were three different accounts.</li>
+            <li><strong>PNS reclaimed every name.</strong> Plain names are now reserved for the Pentagon Name Service so they can be sold as PNS names (bought at <a href="https://id.peg.gg">id.peg.gg</a>, paid in PC). Every existing user was renamed to their name plus a number, all <strong>lowercase alphanumeric</strong>: <code>Jon</code>/<code>JON</code>/<code>JoN</code> → <code>jon1</code>/<code>jon2</code>/<code>jon3</code>. The old name was kept in <code>user_legacy_username</code>.</li>
+            <li><strong>Legacy names still sign in</strong> until someone buys that PNS name: login tries PNS first and falls back to the legacy mapping only when no PNS name exists for the string. Once the PNS name is minted and bound, it resolves to the PNS owner.</li>
+            <li><strong>New users never choose a name or password.</strong> Sign-up is email-only (lowest barrier; people gave up trying to find a free name or invent a password). The account gets <code>user&lt;id&gt;</code> and a generated password, both in the welcome email. A real name = buy a PNS name and bind it.</li>
+        </ol>
+        <div class="alert alert-danger">
+            <strong>⚠️ Never let users type a free-form username at sign-up</strong> (it would collide with reserved PNS names), and never fold legacy names case-insensitively (<code>jon</code> must not pick one of Jon/JON/JoN by lowest id). Mirror <code>/user/login</code> exactly.
+        </div>
+
+        <h3>Sign-up and first login</h3>
+        <ul>
+            <li><strong>Sign-up</strong>: <code>GET /user/captcha/generate</code> → <code>POST /api/v4/user/signup {email, captcha_id, captcha_answer, user_from}</code>. A decline is HTTP 200 <code>status:false</code>. An existing email gets a sign-in email instead (no enumeration).</li>
+            <li><strong>First login</strong>: while the account still has the emailed generated password, <code>/user/info</code> returns <code>needs_activation: true</code>. Offer (skippable, ask again each sign-in) <code>POST /user/activate/set_password {new_password}</code> with Bearer; it returns <code>error: not_required</code> once a password is set. Reset / edit-details password also clear the flag. Accounts created before 2026-09-27 are <code>false</code> (unknowable).</li>
+            <li><strong>Sign-in methods after that</strong>: email + password · <code>user&lt;id&gt;</code> (or legacy / PNS name) + password · email magic link (<code>POST /user/login/email</code>) · PNS name once bought and bound · wallet signature (external wallet) · approve from the Pentagon AI app (roaming).</li>
+        </ul>
+
         <p><strong>Why the order matters:</strong> the same string can be valid at multiple layers (e.g. <code>nftprof</code> is a PNS name AND a legacy username of <code>nftprof1</code>). PNS is the primary identity system, so it must win before legacy. Email is checked first because it is unambiguous and cheapest.</p>
 
         <h3>Internal (in-process) vs. Login resolution</h3>
         <p>There are two contexts where resolution happens, and they share the <em>same order</em> but differ in scope:</p>
         <table>
             <tr><th>Context</th><th>Used by</th><th>Scope</th></tr>
-            <tr><td><strong>Login resolution</strong></td><td><code>POST /user/login</code></td><td>Email + PNS + current username. <strong>Legacy username login was removed</strong> (Apr 29, 2026) — it is NOT accepted as a login credential.</td></tr>
+            <tr><td><strong>Login resolution</strong></td><td><code>POST /user/login</code> (and roaming sign-in <code>/user/roam/open</code>)</td><td>Lowercases any non-email handle, then: email → PNS → current username (exact) → <strong>legacy username (exact), only when no PNS name exists for that string</strong>. Verified against live code 2026-09-28; an earlier note here said legacy login was removed, which is not what production does.</td></tr>
             <tr><td><strong>Internal resolution</strong></td><td>Service-to-service / in-process lookups (e.g. the NPC card-spend handler turning a card owner handle into an account)</td><td>Full chain INCLUDING legacy mapping, because internal lookups ("who owns this card?") legitimately need to resolve old handles that can no longer log in.</td></tr>
         </table>
 
@@ -416,7 +434,7 @@ if account is None:
         <ul>
             <li><strong>Handles are case-insensitive.</strong> Normalize input before matching (lowercase email and username comparisons).</li>
             <li><strong>PNS names are lowercase on-chain.</strong> Always lowercase a PNS name before the contract lookup (e.g. <code>king</code>, not <code>King</code>).</li>
-            <li><strong>Legacy usernames are mapping-only.</strong> They resolve an account for internal lookups and airdrop mapping, but are NOT valid login credentials.</li>
+            <li><strong>Legacy usernames</strong> resolve for internal lookups and airdrop mapping, and for login only while no PNS name exists for that string (see history above). Match them exactly on the lowercased input, never case-folded to "lowest id".</li>
         </ul>
 
         <div class="alert alert-info">
