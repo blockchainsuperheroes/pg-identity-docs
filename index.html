@@ -1488,6 +1488,21 @@ Content-Type: application/json
                 </tbody>
             </table>
 
+            <h4>Paying PC TO a user — never hard-code the gas limit</h4>
+            <p><strong>A plain transfer to an ordinary wallet costs exactly 21,000 gas. An AA2
+            account is a CONTRACT</strong>, so paying it runs its <code>receive()</code> and costs
+            <strong>21,055</strong> — only 55 more, but a hard-coded 21,000 limit does not merely
+            cost less than needed, it <strong>fails outright</strong> with
+            <code>gas required exceeds allowance</code>.</p>
+            <p>Estimate the gas and add a buffer. <strong>Do not test this against an unmigrated
+            account and conclude it works</strong> — today almost every account is still an ordinary
+            wallet, where 21,000 is correct, so a fixed limit passes every test and then fails for
+            exactly the users who have migrated. Two separate services shipped this bug on the same
+            day (2026-10-01); it was caught by the first real top-up to an AA2 account, not by
+            testing.</p>
+            <pre><code>est = w3.eth.estimate_gas({"from": payer, "to": recipient, "value": value_wei})
+tx["gas"] = int(est * 1.5)   # never a literal 21000</code></pre>
+
             <h4>Spending Points</h4>
             <p>Never sign a custodial spend yourself and never hold a custodial key. Call identity and it picks the
             right path per user (legacy key, or AA2 <code>execute()</code>):
